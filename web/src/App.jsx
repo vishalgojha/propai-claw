@@ -237,7 +237,7 @@ function useMarketInfo() {
   return market;
 }
 
-function useMemory(activeLead, market) {
+function useMemory(activeLead, market, refreshKey) {
   const [leadMemory, setLeadMemory] = useState("");
   const [marketMemory, setMarketMemory] = useState("");
   const [globalMemory, setGlobalMemory] = useState([]);
@@ -261,7 +261,7 @@ function useMemory(activeLead, market) {
     return () => {
       active = false;
     };
-  }, [activeLead]);
+  }, [activeLead, refreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -282,7 +282,7 @@ function useMemory(activeLead, market) {
     return () => {
       active = false;
     };
-  }, [market]);
+  }, [market, refreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -300,7 +300,7 @@ function useMemory(activeLead, market) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshKey]);
 
   return { leadMemory, marketMemory, globalMemory };
 }
@@ -342,7 +342,16 @@ export default function App() {
   const market = useMarketSearch();
   const workflowRuns = useWorkflowRuns();
   const marketInfo = useMarketInfo();
-  const memory = useMemory(activeLead, marketInfo);
+  const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
+  const memory = useMemory(activeLead, marketInfo, memoryRefreshKey);
+  const [memoryScope, setMemoryScope] = useState("lead");
+  const [memoryKey, setMemoryKey] = useState("");
+  const [memoryContent, setMemoryContent] = useState("");
+  const [memoryStatus, setMemoryStatus] = useState("");
+  const [memorySaving, setMemorySaving] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(null);
+  const [workflowDetail, setWorkflowDetail] = useState(null);
+  const [workflowDetailLoading, setWorkflowDetailLoading] = useState(false);
 
   const stats = useMemo(() => {
     const hot = leads.filter((lead) => lead.status === "hot").length;
@@ -351,6 +360,86 @@ export default function App() {
     const pipeline = hot + warm;
     return { hot, warm, cold, pipeline };
   }, [leads]);
+
+  useEffect(() => {
+    if (memoryScope === "lead") {
+      if (activeLead) {
+        setMemoryKey(String(activeLead.id));
+        setMemoryContent(memory.leadMemory || "");
+      }
+    } else if (memoryScope === "market") {
+      if (marketInfo && marketInfo.city) {
+        setMemoryKey(marketInfo.city);
+        setMemoryContent(memory.marketMemory || "");
+      }
+    } else if (memoryScope === "global") {
+      if (!memoryKey) {
+        setMemoryKey("general");
+      }
+      if (!memoryContent && memory.globalMemory.length) {
+        setMemoryContent(memory.globalMemory[0].content || "");
+      }
+    }
+  }, [
+    memoryScope,
+    activeLead,
+    marketInfo,
+    memory.leadMemory,
+    memory.marketMemory,
+    memory.globalMemory
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadWorkflowDetail() {
+      if (!selectedWorkflowId) {
+        setWorkflowDetail(null);
+        return;
+      }
+      setWorkflowDetailLoading(true);
+      try {
+        const response = await fetch(`/api/workflows/${selectedWorkflowId}`);
+        if (!response.ok) throw new Error("Failed to load workflow details");
+        const data = await response.json();
+        if (active) setWorkflowDetail(data);
+      } catch (_) {
+        if (active) setWorkflowDetail(null);
+      } finally {
+        if (active) setWorkflowDetailLoading(false);
+      }
+    }
+    loadWorkflowDetail();
+    return () => {
+      active = false;
+    };
+  }, [selectedWorkflowId]);
+
+  async function saveMemoryEntry() {
+    if (!memoryScope || !memoryKey || !memoryContent.trim()) {
+      setMemoryStatus("Scope, key, and content are required.");
+      return;
+    }
+    setMemorySaving(true);
+    setMemoryStatus("");
+    try {
+      const response = await fetch("/api/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: memoryScope,
+          key: memoryKey,
+          content: memoryContent.trim()
+        })
+      });
+      if (!response.ok) throw new Error("Failed to save memory");
+      setMemoryStatus("Memory saved.");
+      setMemoryRefreshKey((value) => value + 1);
+    } catch (_) {
+      setMemoryStatus("Failed to save memory.");
+    } finally {
+      setMemorySaving(false);
+    }
+  }
 
   return (
     <div className="min-h-screen text-text">
@@ -671,9 +760,15 @@ export default function App() {
             <div className="mt-4 space-y-3 text-sm">
               {workflowRuns.length ? (
                 workflowRuns.slice(0, 6).map((run) => (
-                  <div
+                  <button
+                    type="button"
                     key={run.id}
-                    className="rounded-xl border border-border bg-panelStrong px-4 py-3"
+                    onClick={() => setSelectedWorkflowId(run.id)}
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                      selectedWorkflowId === run.id
+                        ? "border-accent bg-panelStrong"
+                        : "border-border bg-panelStrong hover:border-accent"
+                    }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -686,12 +781,47 @@ export default function App() {
                         {run.status}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))
               ) : (
                 <p className="text-sm text-textMuted">
                   No workflow runs yet. Trigger a follow-up scan to populate.
                 </p>
+              )}
+            </div>
+            <div className="mt-5 border-t border-border pt-4 text-sm text-textMuted">
+              {workflowDetailLoading && <p>Loading workflow details...</p>}
+              {!workflowDetailLoading && workflowDetail && (
+                <div>
+                  <p className="text-xs uppercase text-textMuted">Details</p>
+                  <p className="mt-2 font-semibold text-text">
+                    {workflowDetail.run.name}
+                  </p>
+                  <p className="text-xs text-textMuted">
+                    Status: {workflowDetail.run.status}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {(workflowDetail.steps || []).map((step) => (
+                      <div
+                        key={step.id}
+                        className="rounded-lg border border-border bg-panel px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">{step.step_name}</span>
+                          <span className={workflowTag(step.status)}>
+                            {step.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-textMuted">
+                          {step.tool_name}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!workflowDetailLoading && !workflowDetail && (
+                <p>Select a workflow run to view steps.</p>
               )}
             </div>
           </div>
@@ -734,6 +864,48 @@ export default function App() {
                   </p>
                 )}
               </div>
+            </div>
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="text-xs uppercase text-textMuted">Edit memory</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div>
+                  <label className="text-[11px] text-textMuted">Scope</label>
+                  <select
+                    value={memoryScope}
+                    onChange={(event) => setMemoryScope(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-border bg-panelStrong p-2 text-xs text-text"
+                  >
+                    <option value="lead">Lead</option>
+                    <option value="market">Market</option>
+                    <option value="global">Global</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] text-textMuted">Key</label>
+                  <input
+                    value={memoryKey}
+                    onChange={(event) => setMemoryKey(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-border bg-panelStrong p-2 text-xs text-text"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={saveMemoryEntry}
+                    className="w-full rounded-full bg-accent px-3 py-2 text-xs font-semibold text-base"
+                  >
+                    {memorySaving ? "Saving..." : "Save memory"}
+                  </button>
+                </div>
+              </div>
+              <textarea
+                value={memoryContent}
+                onChange={(event) => setMemoryContent(event.target.value)}
+                placeholder="Write memory note..."
+                className="mt-3 h-24 w-full rounded-xl border border-border bg-panelStrong p-3 text-xs text-text outline-none focus:border-accent"
+              />
+              {memoryStatus && (
+                <p className="mt-2 text-xs text-textMuted">{memoryStatus}</p>
+              )}
             </div>
           </div>
         </section>

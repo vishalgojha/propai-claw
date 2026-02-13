@@ -14,7 +14,7 @@ const {
   getWorkflowRun,
   listWorkflowSteps
 } = require("./workflowStore");
-const { listMemory, getMemory } = require("./memoryStore");
+const { listMemory, getMemory, upsertMemory } = require("./memoryStore");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -124,6 +124,22 @@ app.get("/api/memory", async (req, res) => {
   const limit = Number(req.query.limit) || 20;
   const entries = await listMemory(scope, limit);
   return res.json(entries);
+});
+
+app.post("/api/memory", async (req, res) => {
+  const body = req.body || {};
+  if (!body.scope || !body.key || !body.content) {
+    return res
+      .status(400)
+      .json({ error: "Missing scope, key, or content" });
+  }
+  await upsertMemory({
+    scope: body.scope,
+    key: String(body.key),
+    content: body.content,
+    tags: body.tags || null
+  });
+  res.json({ status: "ok" });
 });
 
 app.get("/api/workflows", async (req, res) => {
