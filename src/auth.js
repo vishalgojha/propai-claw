@@ -19,7 +19,15 @@ function canExecute(role, requiredRole) {
   return roleRank(role) >= roleRank(requiredRole);
 }
 
+function maskToken(token) {
+  if (!token) return "";
+  const text = String(token);
+  if (text.length <= 6) return "***";
+  return `${text.slice(0, 3)}***${text.slice(-3)}`;
+}
+
 module.exports = {
   resolveRole,
-  canExecute
+  canExecute,
+  maskToken
 };

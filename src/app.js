@@ -1,5 +1,6 @@
+const crypto = require("crypto");
 const express = require("express");
-const { loadConfig } = require("./configStore");
+const { loadConfig, saveConfig } = require("./configStore");
 const { renderOnboardPage, handleOnboardPost } = require("./onboard");
 const { handleEvent } = require("./agentRouter");
 const { normalizeEvent } = require("./gateway");
@@ -17,7 +18,59 @@ const {
 const { listMemory, getMemory, upsertMemory } = require("./memoryStore");
 const { executeAction, parseCommand, ACTIONS } = require("./agentControl");
 const { addControlLog, listControlLogs } = require("./controlLogStore");
-const { resolveRole, canExecute } = require("./auth");
+const { resolveRole, canExecute, maskToken } = require("./auth");
+
+let whatsappClient = null;
+
+function getTokenStore(config) {
+  const tokens = (config.auth && config.auth.tokens) || {};
+  return {
+    admin: Array.isArray(tokens.admin) ? tokens.admin : [],
+    operator: Array.isArray(tokens.operator) ? tokens.operator : [],
+    viewer: Array.isArray(tokens.viewer) ? tokens.viewer : []
+  };
+}
+
+function listTokensMasked(tokens) {
+  return Object.fromEntries(
+    Object.entries(tokens).map(([role, list]) => [
+      role,
+      list.map((token, index) => ({
+        index,
+        masked: maskToken(token)
+      }))
+    ])
+  );
+}
+
+function generateToken(existing = new Set()) {
+  let token = "";
+  do {
+    token = crypto.randomBytes(16).toString("hex");
+  } while (existing.has(token));
+  return token;
+}
+
+function ensureWhatsAppClient() {
+  if (whatsappClient) {
+    return { status: "running" };
+  }
+  whatsappClient = startWhatsApp({
+    onMessage: async (message) => {
+      const latestConfig = loadConfig();
+      const event = normalizeEvent({
+        source: "whatsapp",
+        content: message.body,
+        context: {
+          whatsapp: { from: message.from }
+        }
+      });
+      const result = await handleEvent(event, latestConfig);
+      await message.reply(result.reply);
+    }
+  });
+  return { status: "started" };
+}
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -213,6 +266,79 @@ app.post("/api/agent/command", async (req, res) => {
   }
 });
 
+app.get("/api/auth/me", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  res.json({ role });
+});
+
+app.get("/api/auth/tokens", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role || !canExecute(role, "admin")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const tokens = getTokenStore(config);
+  res.json({ tokens: listTokensMasked(tokens) });
+});
+
+app.post("/api/auth/tokens", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role || !canExecute(role, "admin")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const body = req.body || {};
+  const roleName = String(body.role || "").toLowerCase();
+  if (!["admin", "operator", "viewer"].includes(roleName)) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+  const tokens = getTokenStore(config);
+  const existing = new Set(
+    [...tokens.admin, ...tokens.operator, ...tokens.viewer].filter(Boolean)
+  );
+  const newToken = generateToken(existing);
+  tokens[roleName].push(newToken);
+  saveConfig({ auth: { tokens } });
+  res.json({
+    role: roleName,
+    token: newToken,
+    masked: maskToken(newToken),
+    index: tokens[roleName].length - 1
+  });
+});
+
+app.delete("/api/auth/tokens", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role || !canExecute(role, "admin")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const body = req.body || {};
+  const roleName = String(body.role || "").toLowerCase();
+  if (!["admin", "operator", "viewer"].includes(roleName)) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+  const index = Number(body.index);
+  if (!Number.isInteger(index)) {
+    return res.status(400).json({ error: "Invalid token index" });
+  }
+  const tokens = getTokenStore(config);
+  if (index < 0 || index >= tokens[roleName].length) {
+    return res.status(404).json({ error: "Token not found" });
+  }
+  const [removed] = tokens[roleName].splice(index, 1);
+  saveConfig({ auth: { tokens } });
+  res.json({ removed: maskToken(removed), role: roleName, index });
+});
+
 app.get("/api/control/logs", async (req, res) => {
   const config = loadConfig();
   const token = req.headers["x-propai-token"];
@@ -222,6 +348,35 @@ app.get("/api/control/logs", async (req, res) => {
   }
   const logs = await listControlLogs(50);
   res.json(logs);
+});
+
+app.get("/api/whatsapp/status", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  res.json({
+    enabled: Boolean(config.whatsapp && config.whatsapp.enabled),
+    running: Boolean(whatsappClient)
+  });
+});
+
+app.post("/api/whatsapp/start", (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role || !canExecute(role, "operator")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  if (!config.whatsapp || !config.whatsapp.enabled) {
+    return res
+      .status(400)
+      .json({ error: "WhatsApp is disabled in config." });
+  }
+  const result = ensureWhatsAppClient();
+  res.json(result);
 });
 
 app.get("/api/workflows", async (req, res) => {
@@ -281,18 +436,5 @@ app.listen(port, () => {
 });
 
 if (config.whatsapp && config.whatsapp.enabled) {
-  startWhatsApp({
-    onMessage: async (message) => {
-      const latestConfig = loadConfig();
-      const event = normalizeEvent({
-        source: "whatsapp",
-        content: message.body,
-        context: {
-          whatsapp: { from: message.from }
-        }
-      });
-      const result = await handleEvent(event, latestConfig);
-      await message.reply(result.reply);
-    }
-  });
+  ensureWhatsAppClient();
 }

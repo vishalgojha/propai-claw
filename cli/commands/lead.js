@@ -7,6 +7,7 @@ const {
   updateLeadFields
 } = require("../../src/leadStore");
 const { scoreLead } = require("../../src/leadScoring");
+const { loadConfig } = require("../../src/configStore");
 
 function registerLead(program) {
   const lead = program.command("lead").description("Lead management");
@@ -103,7 +104,8 @@ function registerLead(program) {
         return;
       }
       const messages = await listMessages(leadRecord.id, 20);
-      const result = scoreLead(leadRecord, messages);
+      const config = loadConfig();
+      const result = scoreLead(leadRecord, messages, config.leadScoring || {});
       await updateLeadFields(leadRecord.id, { status: result.status });
       console.log(
         chalk.green(

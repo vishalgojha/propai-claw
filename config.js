@@ -103,6 +103,10 @@ const DEFAULT_CONFIG = {
   automations: {
     autoDraft: true
   },
+  leadScoring: {
+    hot: 6,
+    warm: 3
+  },
   tools: {
     disabled: [],
     permissions: {}

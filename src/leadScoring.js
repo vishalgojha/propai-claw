@@ -1,4 +1,4 @@
-function scoreLead(lead, messages = []) {
+function scoreLead(lead, messages = [], thresholds = {}) {
   let score = 0;
   const reasons = [];
 
@@ -32,9 +32,16 @@ function scoreLead(lead, messages = []) {
     reasons.push("active conversation");
   }
 
+  const hotThreshold = Number.isFinite(Number(thresholds.hot))
+    ? Number(thresholds.hot)
+    : 6;
+  const warmThreshold = Number.isFinite(Number(thresholds.warm))
+    ? Number(thresholds.warm)
+    : 3;
+
   let status = "cold";
-  if (score >= 6) status = "hot";
-  else if (score >= 3) status = "warm";
+  if (score >= hotThreshold) status = "hot";
+  else if (score >= warmThreshold) status = "warm";
 
   return { score, status, reasons };
 }

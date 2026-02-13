@@ -13,7 +13,16 @@ const ACTIONS = {
   run_health_check: { role: "viewer" },
   test_gmail: { role: "operator" },
   run_workflow: { role: "operator" },
-  toggle_auto_draft: { role: "admin" }
+  toggle_auto_draft: { role: "admin" },
+  toggle_whatsapp: { role: "admin" },
+  toggle_gmail: { role: "admin" },
+  set_search_provider: { role: "admin" },
+  set_search_key: { role: "admin" },
+  set_market_city: { role: "operator" },
+  set_market_notes: { role: "operator" },
+  set_temperature: { role: "admin" },
+  set_lead_scoring: { role: "admin" },
+  toggle_web_onboarding: { role: "admin" }
 };
 
 function normalizeProvider(value) {
@@ -66,6 +75,63 @@ function parseCommand(message) {
   }
   if (lower.includes("disable scheduler") || lower.includes("turn off automation")) {
     return { action: "toggle_scheduler", enabled: false };
+  }
+
+  if (lower.includes("enable whatsapp")) {
+    return { action: "toggle_whatsapp", enabled: true };
+  }
+  if (lower.includes("disable whatsapp")) {
+    return { action: "toggle_whatsapp", enabled: false };
+  }
+
+  if (lower.includes("enable gmail")) {
+    return { action: "toggle_gmail", enabled: true };
+  }
+  if (lower.includes("disable gmail")) {
+    return { action: "toggle_gmail", enabled: false };
+  }
+
+  const searchProviderMatch =
+    lower.match(/set search provider to ([a-z\s]+)/) ||
+    lower.match(/switch search provider to ([a-z\s]+)/);
+  if (searchProviderMatch) {
+    return { action: "set_search_provider", provider: searchProviderMatch[1].trim() };
+  }
+
+  const searchKeyMatch = lower.match(/set search key to ([^]+)$/);
+  if (searchKeyMatch) {
+    return { action: "set_search_key", apiKey: searchKeyMatch[1].trim() };
+  }
+
+  const marketCityMatch = lower.match(/set market city to ([a-z\s]+)/);
+  if (marketCityMatch) {
+    return { action: "set_market_city", city: marketCityMatch[1].trim() };
+  }
+
+  const marketNotesMatch = lower.match(/set market notes to ([^]+)$/);
+  if (marketNotesMatch) {
+    return { action: "set_market_notes", notes: marketNotesMatch[1].trim() };
+  }
+
+  const tempMatch = lower.match(/set temperature to ([0-9.]+)/);
+  if (tempMatch) {
+    return { action: "set_temperature", temperature: Number(tempMatch[1]) };
+  }
+
+  const scoringMatch = lower.match(/lead scoring.*hot\s*(\d+).*warm\s*(\d+)/);
+  if (scoringMatch) {
+    return {
+      action: "set_lead_scoring",
+      hot: Number(scoringMatch[1]),
+      warm: Number(scoringMatch[2])
+    };
+  }
+
+  if (lower.includes("enable web onboarding")) {
+    return { action: "toggle_web_onboarding", enabled: true };
+  }
+  if (lower.includes("disable web onboarding")) {
+    return { action: "toggle_web_onboarding", enabled: false };
   }
 
   const leadIdMatch = lower.match(/mark lead (\d+) as (hot|warm|cold)/);
@@ -169,6 +235,81 @@ async function executeAction(command, role) {
     return {
       status: "success",
       message: `Scheduler ${parsed.enabled ? "enabled" : "disabled"}.`
+    };
+  }
+
+  if (parsed.action === "toggle_whatsapp") {
+    saveConfig({ whatsapp: { enabled: parsed.enabled } });
+    return {
+      status: "success",
+      message: `WhatsApp ${parsed.enabled ? "enabled" : "disabled"}.`
+    };
+  }
+
+  if (parsed.action === "toggle_gmail") {
+    saveConfig({ gmail: { enabled: parsed.enabled } });
+    return {
+      status: "success",
+      message: `Gmail ${parsed.enabled ? "enabled" : "disabled"}.`
+    };
+  }
+
+  if (parsed.action === "set_search_provider") {
+    saveConfig({ search: { provider: parsed.provider } });
+    return {
+      status: "success",
+      message: `Search provider set to ${parsed.provider}.`
+    };
+  }
+
+  if (parsed.action === "set_search_key") {
+    saveConfig({ search: { apiKey: parsed.apiKey } });
+    return {
+      status: "success",
+      message: "Search key updated."
+    };
+  }
+
+  if (parsed.action === "set_market_city") {
+    saveConfig({ market: { city: parsed.city } });
+    return {
+      status: "success",
+      message: `Market city set to ${parsed.city}.`
+    };
+  }
+
+  if (parsed.action === "set_market_notes") {
+    saveConfig({ market: { notes: parsed.notes } });
+    return {
+      status: "success",
+      message: "Market notes updated."
+    };
+  }
+
+  if (parsed.action === "set_temperature") {
+    if (Number.isNaN(parsed.temperature)) {
+      return { status: "error", message: "Invalid temperature." };
+    }
+    saveConfig({ ai: { temperature: parsed.temperature } });
+    return {
+      status: "success",
+      message: `Temperature set to ${parsed.temperature}.`
+    };
+  }
+
+  if (parsed.action === "set_lead_scoring") {
+    saveConfig({ leadScoring: { hot: parsed.hot, warm: parsed.warm } });
+    return {
+      status: "success",
+      message: `Lead scoring thresholds updated (hot ${parsed.hot}, warm ${parsed.warm}).`
+    };
+  }
+
+  if (parsed.action === "toggle_web_onboarding") {
+    saveConfig({ onboarding: { webEnabled: parsed.enabled } });
+    return {
+      status: "success",
+      message: `Web onboarding ${parsed.enabled ? "enabled" : "disabled"}.`
     };
   }
 

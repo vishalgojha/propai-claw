@@ -359,6 +359,22 @@ export default function App() {
   const [consoleMessages, setConsoleMessages] = useState([]);
   const [consoleStatus, setConsoleStatus] = useState("");
   const [consoleRole, setConsoleRole] = useState("");
+  const [authRole, setAuthRole] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
+  const [tokensByRole, setTokensByRole] = useState({
+    admin: [],
+    operator: [],
+    viewer: []
+  });
+  const [tokenStatus, setTokenStatus] = useState("");
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenRole, setTokenRole] = useState("operator");
+  const [newTokenValue, setNewTokenValue] = useState("");
+  const [logItems, setLogItems] = useState([]);
+  const [logStatus, setLogStatus] = useState("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [whatsappStatus, setWhatsappStatus] = useState("");
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
 
   const stats = useMemo(() => {
     const hot = leads.filter((lead) => lead.status === "hot").length;
@@ -425,6 +441,50 @@ export default function App() {
     localStorage.setItem("propai_token", consoleToken);
   }, [consoleToken]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadRole() {
+      if (!consoleToken) {
+        setAuthRole("");
+        setConsoleRole("");
+        setAuthStatus("");
+        return;
+      }
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: { "x-propai-token": consoleToken }
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unauthorized");
+        if (active) {
+          setAuthRole(data.role || "");
+          setConsoleRole(data.role || "");
+          setAuthStatus("");
+        }
+      } catch (_) {
+        if (active) {
+          setAuthRole("");
+          setConsoleRole("");
+          setAuthStatus("Token not recognized.");
+        }
+      }
+    }
+    loadRole();
+    return () => {
+      active = false;
+    };
+  }, [consoleToken]);
+
+  useEffect(() => {
+    if (authRole !== "admin") {
+      setTokensByRole({ admin: [], operator: [], viewer: [] });
+      setLogItems([]);
+      return;
+    }
+    loadTokens();
+    loadLogs();
+  }, [authRole]);
+
   async function saveMemoryEntry() {
     if (!memoryScope || !memoryKey || !memoryContent.trim()) {
       setMemoryStatus("Scope, key, and content are required.");
@@ -452,6 +512,123 @@ export default function App() {
     }
   }
 
+  async function loadTokens() {
+    if (!consoleToken) return;
+    setTokenLoading(true);
+    setTokenStatus("");
+    try {
+      const response = await fetch("/api/auth/tokens", {
+        headers: { "x-propai-token": consoleToken }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load tokens");
+      setTokensByRole(data.tokens || { admin: [], operator: [], viewer: [] });
+    } catch (_) {
+      setTokensByRole({ admin: [], operator: [], viewer: [] });
+      setTokenStatus("Unable to load tokens.");
+    } finally {
+      setTokenLoading(false);
+    }
+  }
+
+  async function createToken() {
+    if (!consoleToken) return;
+    setTokenLoading(true);
+    setTokenStatus("");
+    setNewTokenValue("");
+    try {
+      const response = await fetch("/api/auth/tokens", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-propai-token": consoleToken
+        },
+        body: JSON.stringify({ role: tokenRole })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to create token");
+      setNewTokenValue(data.token || "");
+      setTokenStatus(`Created ${data.role} token.`);
+      await loadTokens();
+    } catch (_) {
+      setTokenStatus("Failed to create token.");
+    } finally {
+      setTokenLoading(false);
+    }
+  }
+
+  async function revokeToken(role, index) {
+    if (!consoleToken) return;
+    setTokenLoading(true);
+    setTokenStatus("");
+    try {
+      const response = await fetch("/api/auth/tokens", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-propai-token": consoleToken
+        },
+        body: JSON.stringify({ role, index })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to revoke token");
+      setTokenStatus("Token revoked.");
+      await loadTokens();
+    } catch (_) {
+      setTokenStatus("Failed to revoke token.");
+    } finally {
+      setTokenLoading(false);
+    }
+  }
+
+  async function loadLogs() {
+    if (!consoleToken) return;
+    setLogLoading(true);
+    setLogStatus("");
+    try {
+      const response = await fetch("/api/control/logs", {
+        headers: { "x-propai-token": consoleToken }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load logs");
+      setLogItems(Array.isArray(data) ? data : []);
+    } catch (_) {
+      setLogItems([]);
+      setLogStatus("Unable to load control logs.");
+    } finally {
+      setLogLoading(false);
+    }
+  }
+
+  async function syncWhatsApp() {
+    if (!consoleToken) {
+      setWhatsappStatus("Add an operator or admin token first.");
+      return;
+    }
+    setWhatsappLoading(true);
+    setWhatsappStatus("");
+    try {
+      const response = await fetch("/api/whatsapp/start", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-propai-token": consoleToken
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to start WhatsApp");
+      setWhatsappStatus(
+        data.status === "running"
+          ? "WhatsApp is already running."
+          : "WhatsApp started. Scan the QR code in the terminal."
+      );
+    } catch (err) {
+      setWhatsappStatus(err.message || "Unable to sync WhatsApp.");
+    } finally {
+      setWhatsappLoading(false);
+    }
+  }
+
   async function sendConsoleCommand() {
     if (!consoleInput.trim()) return;
     const userMessage = consoleInput.trim();
@@ -475,7 +652,7 @@ export default function App() {
         setConsoleStatus(data.error || "Command failed.");
         return;
       }
-      setConsoleRole(data.role || "");
+      setConsoleRole(data.role || authRole || "");
       setConsoleMessages((messages) => [
         ...messages,
         { role: "system", content: data.message || "Command executed." }
@@ -505,13 +682,20 @@ export default function App() {
             <div className="rounded-full border border-border bg-panel px-4 py-2 text-xs">
               Backend: {error ? "offline" : "connected"}
             </div>
-            <button className="rounded-full border border-border bg-panel px-4 py-2 text-xs text-textMuted transition hover:text-text">
-              Sync WhatsApp
+            <button
+              onClick={syncWhatsApp}
+              className="rounded-full border border-border bg-panel px-4 py-2 text-xs text-textMuted transition hover:text-text"
+              disabled={whatsappLoading}
+            >
+              {whatsappLoading ? "Syncing..." : "Sync WhatsApp"}
             </button>
             <button className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-base">
               New follow-up
             </button>
           </div>
+          {whatsappStatus && (
+            <p className="text-xs text-textMuted">{whatsappStatus}</p>
+          )}
         </header>
 
         <section className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -573,7 +757,7 @@ export default function App() {
                         {lead.lead_name || "Unnamed lead"}
                       </p>
                       <p className="text-xs text-textMuted">
-                        {lead.location || "Unknown location"} •{" "}
+                        {lead.location || "Unknown location"} |{" "}
                         {lead.configuration || "Config TBD"}
                       </p>
                     </div>
@@ -675,7 +859,7 @@ export default function App() {
                   <p className="text-xs uppercase text-textMuted">Risk flags</p>
                   <div className="mt-2 space-y-1 text-xs text-textMuted">
                     {computeRiskFlags(activeLead).map((flag) => (
-                      <p key={flag}>• {flag}</p>
+                      <p key={flag}>- {flag}</p>
                     ))}
                   </div>
                 </div>
@@ -898,7 +1082,7 @@ export default function App() {
                   <ul className="mt-2 space-y-2 text-xs text-textMuted">
                     {memory.globalMemory.map((entry) => (
                       <li key={`${entry.scope}-${entry.key}`}>
-                        • {entry.content}
+                        - {entry.content}
                       </li>
                     ))}
                   </ul>
@@ -961,7 +1145,7 @@ export default function App() {
                 Agent Console
               </h2>
               <span className="text-xs text-textMuted">
-                Role: {consoleRole || "unknown"}
+                Role: {authRole || consoleRole || "unknown"}
               </span>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
@@ -976,6 +1160,9 @@ export default function App() {
                 <p className="mt-3 text-[11px] text-textMuted">
                   Tokens are set in config.local.json under auth.tokens.
                 </p>
+                {authStatus && (
+                  <p className="mt-2 text-[11px] text-bad">{authStatus}</p>
+                )}
               </div>
               <div className="flex flex-col rounded-xl border border-border bg-panelStrong p-4">
                 <div className="flex-1 space-y-3 overflow-y-auto text-sm">
@@ -994,8 +1181,8 @@ export default function App() {
                     ))
                   ) : (
                     <p className="text-xs text-textMuted">
-                      Try: “Switch model to gpt-4o”, “Mark lead 3 as hot”, “Enable
-                      scheduler”.
+                      Try: "Switch model to gpt-4o", "Mark lead 3 as hot",
+                      "Enable scheduler".
                     </p>
                   )}
                 </div>
@@ -1026,6 +1213,134 @@ export default function App() {
             </div>
           </div>
         </section>
+
+        {authRole === "admin" && (
+          <section className="mt-10 grid gap-6 xl:grid-cols-2">
+            <div className="card p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm uppercase tracking-[0.3em] text-textMuted">
+                  Access Control
+                </h2>
+                <button
+                  onClick={loadTokens}
+                  className="rounded-full border border-border bg-panel px-3 py-2 text-[11px] text-textMuted transition hover:text-text"
+                >
+                  Refresh
+                </button>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+                <select
+                  value={tokenRole}
+                  onChange={(event) => setTokenRole(event.target.value)}
+                  className="w-full rounded-lg border border-border bg-panelStrong p-2 text-xs text-text"
+                >
+                  <option value="admin">Admin</option>
+                  <option value="operator">Operator</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+                <button
+                  onClick={createToken}
+                  className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-base"
+                  disabled={tokenLoading}
+                >
+                  {tokenLoading ? "Working..." : "Create token"}
+                </button>
+              </div>
+              {newTokenValue && (
+                <div className="mt-4 rounded-lg border border-border bg-panelStrong p-3 text-xs text-text">
+                  <p className="text-[11px] uppercase text-textMuted">
+                    New token (store securely)
+                  </p>
+                  <p className="mt-2 break-all">{newTokenValue}</p>
+                </div>
+              )}
+              {tokenStatus && (
+                <p className="mt-3 text-xs text-textMuted">{tokenStatus}</p>
+              )}
+              <div className="mt-5 space-y-4 text-xs text-textMuted">
+                {["admin", "operator", "viewer"].map((roleName) => (
+                  <div key={roleName}>
+                    <p className="text-[11px] uppercase text-textMuted">
+                      {roleName}
+                    </p>
+                    <div className="mt-2 space-y-2">
+                      {(tokensByRole[roleName] || []).length ? (
+                        tokensByRole[roleName].map((token) => (
+                          <div
+                            key={`${roleName}-${token.index}`}
+                            className="flex items-center justify-between rounded-lg border border-border bg-panel px-3 py-2"
+                          >
+                            <span className="text-xs text-text">
+                              {token.masked}
+                            </span>
+                            <button
+                              onClick={() =>
+                                revokeToken(roleName, token.index)
+                              }
+                              className="text-[11px] text-bad"
+                              disabled={tokenLoading}
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[11px] text-textMuted">
+                          No tokens yet.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm uppercase tracking-[0.3em] text-textMuted">
+                  Control Logs
+                </h2>
+                <button
+                  onClick={loadLogs}
+                  className="rounded-full border border-border bg-panel px-3 py-2 text-[11px] text-textMuted transition hover:text-text"
+                >
+                  Refresh
+                </button>
+              </div>
+              <div className="mt-4 space-y-3 text-sm text-textMuted">
+                {logLoading && <p>Loading logs...</p>}
+                {!logLoading && logItems.length === 0 && (
+                  <p>No control actions yet.</p>
+                )}
+                {!logLoading &&
+                  logItems.map((log) => (
+                    <div
+                      key={log.id}
+                      className="rounded-lg border border-border bg-panelStrong px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="uppercase text-textMuted">
+                          {log.role || "unknown"}
+                        </span>
+                        <span className={workflowTag(log.status)}>
+                          {log.status}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-text">
+                        {log.command || "Command"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-textMuted">
+                        {log.action || "action"} | {formatTime(log.created_at)}
+                      </p>
+                    </div>
+                  ))}
+                {logStatus && (
+                  <p className="text-xs text-textMuted">{logStatus}</p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

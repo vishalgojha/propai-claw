@@ -95,6 +95,29 @@ Example commands:
 - "Enable scheduler"
 - "Follow-up default to 2 days"
 
+Admin tokens can manage access from the UI under "Access Control". New tokens are generated once and should be stored securely.
+
+### Control Logs
+
+Admins can review control action logs in the UI. The backend exposes:
+
+```
+GET /api/control/logs
+```
+
+### Lead Scoring Thresholds
+
+Configure hot/warm thresholds in `config.local.json`:
+
+```
+{
+  "leadScoring": {
+    "hot": 6,
+    "warm": 3
+  }
+}
+```
+
 ## Providers
 
 Supported providers:
@@ -114,6 +137,7 @@ Supported providers:
 
 1. Set `whatsapp.enabled` to true in `config.local.json`
 2. Start the server and scan the QR code in the terminal
+3. Or use the UI "Sync WhatsApp" button with an operator/admin token to start the client
 
 ## Gmail
 
