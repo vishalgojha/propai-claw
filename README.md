@@ -98,6 +98,10 @@ Example commands:
 
 Admin tokens can manage access from the UI under "Access Control". New tokens are generated once and should be stored securely.
 
+## Soul
+
+The system prompt automatically appends `identity/soul.md` to every AI call. Update that file to change PropAI-Claw's core behavior.
+
 ### Control Logs
 
 Admins can review control action logs in the UI. The backend exposes:

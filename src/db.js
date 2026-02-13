@@ -14,6 +14,10 @@ async function initDb(db) {
       lead_name TEXT,
       phone TEXT,
       email TEXT,
+      group_name TEXT,
+      lead_type TEXT,
+      contact TEXT,
+      urgency_score INTEGER,
       intent TEXT,
       budget TEXT,
       location TEXT,
@@ -98,6 +102,25 @@ async function initDb(db) {
       created_at TEXT
     );
   `);
+
+  await ensureLeadColumns(db);
+}
+
+async function ensureLeadColumns(db) {
+  const columns = await db.all("PRAGMA table_info(leads)");
+  const existing = new Set(columns.map((col) => col.name));
+  const additions = [
+    { name: "group_name", type: "TEXT" },
+    { name: "lead_type", type: "TEXT" },
+    { name: "contact", type: "TEXT" },
+    { name: "urgency_score", type: "INTEGER" }
+  ];
+
+  for (const column of additions) {
+    if (!existing.has(column.name)) {
+      await db.exec(`ALTER TABLE leads ADD COLUMN ${column.name} ${column.type}`);
+    }
+  }
 }
 
 async function getDb() {

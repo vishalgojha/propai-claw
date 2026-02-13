@@ -323,11 +323,13 @@ function computeRiskFlags(lead) {
   if (!lead.timeline) flags.push("Timeline missing");
   if (!lead.configuration) flags.push("Configuration missing");
   if (!lead.location) flags.push("Location missing");
+  if (!lead.contact && !lead.phone) flags.push("Contact missing");
   if (!flags.length) flags.push("No risks flagged");
   return flags;
 }
 
 function computeNextAction(lead) {
+  if (!lead.contact && !lead.phone) return "Request contact details.";
   if (!lead.budget) return "Ask budget range and financing plan.";
   if (!lead.location) return "Confirm preferred micro-market.";
   if (!lead.configuration) return "Confirm configuration and floor preference.";
@@ -837,6 +839,10 @@ export default function App() {
                     <span>{activeLead.intent || "-"}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-textMuted">Lead type</span>
+                    <span>{activeLead.lead_type || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-textMuted">Budget</span>
                     <span>{activeLead.budget || "-"}</span>
                   </div>
@@ -847,6 +853,18 @@ export default function App() {
                   <div className="flex justify-between">
                     <span className="text-textMuted">Timeline</span>
                     <span>{activeLead.timeline || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-textMuted">Contact</span>
+                    <span>{activeLead.contact || activeLead.phone || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-textMuted">Urgency</span>
+                    <span>{activeLead.urgency_score || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-textMuted">Group</span>
+                    <span>{activeLead.group_name || "-"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-textMuted">Score</span>

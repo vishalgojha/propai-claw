@@ -57,16 +57,25 @@ function ensureWhatsAppClient() {
   }
   whatsappClient = startWhatsApp({
     onMessage: async (message) => {
+      const chat = await message.getChat();
+      const isGroup = chat && chat.isGroup;
       const latestConfig = loadConfig();
       const event = normalizeEvent({
-        source: "whatsapp",
+        source: isGroup ? "whatsapp_group" : "whatsapp",
         content: message.body,
         context: {
-          whatsapp: { from: message.from }
+          whatsapp: {
+            from: message.from,
+            author: message.author || null,
+            isGroup: Boolean(isGroup),
+            groupName: isGroup ? chat.name : null
+          }
         }
       });
       const result = await handleEvent(event, latestConfig);
-      await message.reply(result.reply);
+      if (result && result.reply && result.reply.trim()) {
+        await message.reply(result.reply);
+      }
     }
   });
   return { status: "started" };

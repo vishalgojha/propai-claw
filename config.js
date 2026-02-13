@@ -148,6 +148,9 @@ const DEFAULT_CONFIG = {
   memory: {
     enabled: true
   },
+  identity: {
+    soulPath: "identity/soul.md"
+  },
   modelCatalog: DEFAULT_MODEL_CATALOG
 };
 

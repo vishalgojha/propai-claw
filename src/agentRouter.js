@@ -21,11 +21,15 @@ function summarizeLead(lead) {
     `Name: ${lead.lead_name || "-"}`,
     `Phone: ${lead.phone || "-"}`,
     `Email: ${lead.email || "-"}`,
+    `Contact: ${lead.contact || "-"}`,
+    `Lead Type: ${lead.lead_type || "-"}`,
+    `Group: ${lead.group_name || "-"}`,
     `Intent: ${lead.intent || "-"}`,
     `Budget: ${lead.budget || "-"}`,
     `Location: ${lead.location || "-"}`,
     `Configuration: ${lead.configuration || "-"}`,
     `Timeline: ${lead.timeline || "-"}`,
+    `Urgency Score: ${lead.urgency_score || "-"}`,
     `Status: ${lead.status || "-"}`
   ].join("\n");
 }
@@ -40,11 +44,13 @@ function summarizeConversation(messages) {
 
 function missingLeadFields(lead) {
   const required = [
+    { key: "lead_type", label: "lead type (buyer/seller)" },
     { key: "intent", label: "intent (buy/sell/rent)" },
     { key: "budget", label: "budget" },
     { key: "location", label: "location" },
     { key: "configuration", label: "configuration (BHK)" },
-    { key: "timeline", label: "timeline" }
+    { key: "timeline", label: "timeline" },
+    { key: "contact", label: "contact" }
   ];
   return required
     .filter((item) => !lead[item.key])
@@ -108,10 +114,16 @@ async function handleEvent(event, config) {
   const agent = selectAgent(content, config);
   const systemPrompt =
     (agent && agent.systemPrompt) || config.ai.systemPrompt;
+  const isGroup =
+    event.context && event.context.whatsapp
+      ? Boolean(event.context.whatsapp.isGroup)
+      : false;
+  const extractSource =
+    event.source === "whatsapp" && isGroup ? "whatsapp_group" : event.source;
 
   const lead = await getOrCreateLead({
     leadKey: event.leadKey,
-    source: event.source || "web",
+    source: extractSource || "web",
     phone: event.context && event.context.phone,
     email: event.context && event.context.email
   });
@@ -125,10 +137,20 @@ async function handleEvent(event, config) {
     });
   }
 
-  const extracted = await extractLeadFields(content, event.source, config);
-  await updateLeadFields(lead.id, extracted);
+  const extracted = await extractLeadFields(
+    content,
+    extractSource,
+    config,
+    event.context
+  );
+  const { signal, ...leadFields } = extracted || {};
+  await updateLeadFields(lead.id, leadFields);
   const updatedLead = await getLeadById(lead.id);
   const recentMessages = await listMessages(lead.id, 12);
+
+  if (signal === false && extractSource === "whatsapp_group") {
+    return { reply: "", meta: { ignored: true, agent: agent.id } };
+  }
 
   const leadSummary = summarizeLead(updatedLead);
   if (config.memory && config.memory.enabled) {

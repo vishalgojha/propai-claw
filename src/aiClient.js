@@ -1,4 +1,5 @@
 const { DEFAULT_CONFIG } = require("../config");
+const { applySoul } = require("./soul");
 
 function buildMessages(systemPrompt, userPrompt) {
   const messages = [];
@@ -194,7 +195,10 @@ async function generateResponse(prompt, config, options = {}) {
   const providerConfig = resolveProviderConfig(config, provider);
   const model = config.ai.model || providerConfig.model;
   const temperature = config.ai.temperature;
-  const systemPrompt = options.systemPrompt || config.ai.systemPrompt;
+  const systemPrompt = applySoul(
+    options.systemPrompt || config.ai.systemPrompt,
+    config
+  );
 
   switch (provider) {
     case "openai":
