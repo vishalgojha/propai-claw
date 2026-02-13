@@ -38,6 +38,8 @@ Commands include:
 - Workflows: `propai workflow list`, `propai workflow run lead_followup --lead 3`, `propai workflow show 12`
 - Memory: `propai memory list lead`, `propai memory get lead 3`, `propai memory set market Mumbai "Circle rate notes"`
 - Onboarding: `propai onboard`
+- Onboarding status: `propai onboarding status`
+- Setup wizard: `propai setup`
 
 To install the CLI globally:
 
