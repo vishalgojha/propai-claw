@@ -40,6 +40,7 @@ Commands include:
 - Onboarding: `propai onboard`
 - Onboarding status: `propai onboarding status`
 - Setup wizard: `propai setup`
+- Access control: `propai auth list`, `propai auth create --role operator`, `propai auth revoke --role operator --index 0`
 
 To install the CLI globally:
 
