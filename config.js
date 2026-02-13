@@ -90,6 +90,47 @@ const DEFAULT_CONFIG = {
   whatsapp: {
     enabled: false
   },
+  tools: {
+    disabled: [],
+    permissions: {}
+  },
+  scheduler: {
+    enabled: false,
+    timezone: "Asia/Kolkata",
+    jobs: [
+      {
+        name: "lead_followup_scan",
+        cron: "0 */6 * * *",
+        workflow: "lead_followup_scan",
+        enabled: false
+      }
+    ]
+  },
+  agents: {
+    default: {
+      name: "Operator",
+      systemPrompt:
+        "You are PropAI-Claw, a helpful real estate assistant. Be concise and actionable."
+    },
+    researcher: {
+      name: "Researcher",
+      systemPrompt:
+        "You are a real estate market researcher. Provide concise, cited insights and highlight risk."
+    },
+    analyzer: {
+      name: "Analyzer",
+      systemPrompt:
+        "You analyze property brochures and deals. Provide pros, risks, pricing checks, and negotiation angles."
+    },
+    negotiator: {
+      name: "Negotiator",
+      systemPrompt:
+        "You draft negotiation responses and counter-offers. Be firm, professional, and data-driven."
+    }
+  },
+  memory: {
+    enabled: true
+  },
   modelCatalog: DEFAULT_MODEL_CATALOG
 };
 

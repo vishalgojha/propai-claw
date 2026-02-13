@@ -1,7 +1,7 @@
-const { generateResponse } = require("./aiClient");
-const { searchWeb } = require("./searchTool");
-const { sendEmail } = require("./gmail");
 const { extractLeadFields } = require("./leadExtractor");
+const { invokeTool } = require("./toolRegistry");
+const { selectAgent } = require("./agentSelector");
+const { upsertMemory, getMemory, listMemory } = require("./memoryStore");
 const {
   getOrCreateLead,
   updateLeadFields,
@@ -16,21 +16,11 @@ function extractAfterPrefix(text, prefix) {
   return text.slice(index + prefix.length).trim();
 }
 
-function buildLeadKey(message) {
-  const context = message.context || {};
-  if (context.lead_id) return `lead:${context.lead_id}`;
-  if (context.phone) return `phone:${context.phone}`;
-  if (context.email) return `email:${context.email}`;
-  if (context.whatsapp && context.whatsapp.from)
-    return `wa:${context.whatsapp.from}`;
-  if (context.sessionId) return `session:${context.sessionId}`;
-  return `source:${message.source || "unknown"}`;
-}
-
 function summarizeLead(lead) {
   return [
     `Name: ${lead.lead_name || "-"}`,
     `Phone: ${lead.phone || "-"}`,
+    `Email: ${lead.email || "-"}`,
     `Intent: ${lead.intent || "-"}`,
     `Budget: ${lead.budget || "-"}`,
     `Location: ${lead.location || "-"}`,
@@ -44,10 +34,7 @@ function summarizeConversation(messages) {
   if (!messages.length) return "No prior messages.";
   const ordered = [...messages].reverse();
   return ordered
-    .map(
-      (message) =>
-        `[${message.direction}] ${message.content}`.trim()
-    )
+    .map((message) => `[${message.direction}] ${message.content}`.trim())
     .join("\n");
 }
 
@@ -64,7 +51,33 @@ function missingLeadFields(lead) {
     .map((item) => item.label);
 }
 
-function buildContextPrompt({ lead, messages, market }) {
+function formatMemorySection(title, content) {
+  if (!content) return "";
+  return `${title}:\n${content}\n`;
+}
+
+async function buildMemoryContext(lead, config) {
+  const leadMemory = await getMemory("lead", String(lead.id));
+  const marketKey = config.market && config.market.city ? config.market.city : null;
+  const marketMemory = marketKey
+    ? await getMemory("market", marketKey)
+    : null;
+  const globalMemories = await listMemory("global", 3);
+
+  const globalText = globalMemories.length
+    ? globalMemories.map((item) => `- ${item.content}`).join("\n")
+    : "";
+
+  return [
+    formatMemorySection("Lead Memory", leadMemory && leadMemory.content),
+    formatMemorySection("Market Memory", marketMemory && marketMemory.content),
+    formatMemorySection("Global Memory", globalText)
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildContextPrompt({ lead, messages, market, memory }) {
   const missing = missingLeadFields(lead);
   const qualifier = missing.length
     ? `Qualification needed: ask for ${missing.join(", ")}.`
@@ -81,39 +94,61 @@ function buildContextPrompt({ lead, messages, market }) {
     marketLine,
     qualifier,
     "",
+    memory ? `Memory Context:\n${memory}` : "",
     "Conversation History:",
     summarizeConversation(messages)
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-async function handleMessage(message, config) {
-  const content = (message.content || "").trim();
+async function handleEvent(event, config) {
+  const content = (event.content || "").trim();
   const lower = content.toLowerCase();
-  const leadKey = buildLeadKey(message);
+  const agent = selectAgent(content, config);
+  const systemPrompt =
+    (agent && agent.systemPrompt) || config.ai.systemPrompt;
+
   const lead = await getOrCreateLead({
-    leadKey,
-    source: message.source || "web",
-    phone: message.context && message.context.phone,
-    email: message.context && message.context.email
+    leadKey: event.leadKey,
+    source: event.source || "web",
+    phone: event.context && event.context.phone,
+    email: event.context && event.context.email
   });
 
   if (content) {
     await addMessage({
       leadId: lead.id,
-      source: message.source || "web",
+      source: event.source || "web",
       direction: "in",
       content
     });
   }
 
-  const extracted = await extractLeadFields(content, message.source, config);
+  const extracted = await extractLeadFields(content, event.source, config);
   await updateLeadFields(lead.id, extracted);
   const updatedLead = await getLeadById(lead.id);
   const recentMessages = await listMessages(lead.id, 12);
+
+  const leadSummary = summarizeLead(updatedLead);
+  if (config.memory && config.memory.enabled) {
+    await upsertMemory({
+      scope: "lead",
+      key: String(updatedLead.id),
+      content: leadSummary,
+      tags: ["lead", updatedLead.intent || "unknown"]
+    });
+  }
+
+  const memoryContext = config.memory && config.memory.enabled
+    ? await buildMemoryContext(updatedLead, config)
+    : "";
+
   const contextPrompt = buildContextPrompt({
     lead: updatedLead,
     messages: recentMessages,
-    market: config.market || {}
+    market: config.market || {},
+    memory: memoryContext
   });
 
   if (lower.includes("search:")) {
@@ -121,29 +156,40 @@ async function handleMessage(message, config) {
     if (!query) {
       return { reply: "Please provide a search query after 'search:'." };
     }
-    const results = await searchWeb(query, config);
-    const context = results
+    const result = await invokeTool(
+      "search_web",
+      { query },
+      config,
+      { leadId: lead.id, source: event.source }
+    );
+    const context = (result.results || [])
       .map(
         (item, index) =>
           `${index + 1}. ${item.title} - ${item.link}\n${item.snippet}`
       )
       .join("\n\n");
-    const reply = await generateResponse(
-      `${contextPrompt}\n\nUser asked: ${query}\n\nSearch results:\n${context}`,
-      config
+    const replyResult = await invokeTool(
+      "ai_generate",
+      {
+        prompt: `${contextPrompt}\n\nUser asked: ${query}\n\nSearch results:\n${context}`,
+        systemPrompt
+      },
+      config,
+      { leadId: lead.id, source: event.source }
     );
+    const reply = replyResult.text;
     await addMessage({
       leadId: lead.id,
-      source: message.source || "web",
+      source: event.source || "web",
       direction: "out",
       content: reply
     });
-    return { reply, meta: { tool: "search" } };
+    return { reply, meta: { tool: "search", agent: agent.id } };
   }
 
   if (lower.includes("reply email:")) {
     const body = extractAfterPrefix(content, "reply email:");
-    const emailContext = message.context && message.context.email;
+    const emailContext = event.context && event.context.email;
     if (!emailContext || !emailContext.from) {
       return {
         reply:
@@ -154,36 +200,44 @@ async function handleMessage(message, config) {
       ? `Re: ${emailContext.subject}`
       : "Re: Your inquiry";
 
-    await sendEmail(
+    await invokeTool(
+      "gmail_send",
       {
         to: emailContext.from,
         subject,
         body: body || "Thank you for your message."
       },
-      config
+      config,
+      { leadId: lead.id, source: event.source }
     );
     await addMessage({
       leadId: lead.id,
-      source: message.source || "web",
+      source: event.source || "web",
       direction: "out",
       content: "Email sent."
     });
-    return { reply: "Email sent.", meta: { tool: "gmail" } };
+    return { reply: "Email sent.", meta: { tool: "gmail", agent: agent.id } };
   }
 
-  const reply = await generateResponse(
-    `${contextPrompt}\n\nUser message:\n${content}`,
-    config
+  const replyResult = await invokeTool(
+    "ai_generate",
+    {
+      prompt: `${contextPrompt}\n\nUser message:\n${content}`,
+      systemPrompt
+    },
+    config,
+    { leadId: lead.id, source: event.source }
   );
+  const reply = replyResult.text;
   await addMessage({
     leadId: lead.id,
-    source: message.source || "web",
+    source: event.source || "web",
     direction: "out",
     content: reply
   });
-  return { reply, meta: { tool: "ai" } };
+  return { reply, meta: { tool: "ai", agent: agent.id } };
 }
 
 module.exports = {
-  handleMessage
+  handleEvent
 };

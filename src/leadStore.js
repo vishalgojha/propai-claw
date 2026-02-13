@@ -109,6 +109,22 @@ async function listMessages(leadId, limit = 20) {
   );
 }
 
+async function listLeadsNeedingFollowup(hours = 48) {
+  const db = await getDb();
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  return db.all(
+    `SELECT
+      l.*,
+      MAX(m.created_at) AS last_message_at
+     FROM leads l
+     LEFT JOIN messages m ON m.lead_id = l.id
+     WHERE l.status IN ('hot', 'warm')
+     GROUP BY l.id
+     HAVING last_message_at IS NULL OR last_message_at < ?`,
+    cutoff
+  );
+}
+
 async function deleteMessagesForLead(leadId) {
   const db = await getDb();
   await db.run("DELETE FROM messages WHERE lead_id = ?", leadId);
@@ -126,6 +142,7 @@ module.exports = {
   getLeadById,
   listLeads,
   listMessages,
+  listLeadsNeedingFollowup,
   deleteMessagesForLead,
   deleteAllMessages
 };

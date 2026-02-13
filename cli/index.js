@@ -8,6 +8,8 @@ const { registerGmail } = require("./commands/gmail");
 const { registerSearch } = require("./commands/search");
 const { registerConfig } = require("./commands/config");
 const { registerShell } = require("./commands/shell");
+const { registerWorkflow } = require("./commands/workflow");
+const { registerMemory } = require("./commands/memory");
 
 async function run() {
   const program = new Command();
@@ -23,6 +25,8 @@ async function run() {
   registerSearch(program);
   registerConfig(program);
   registerShell(program);
+  registerWorkflow(program);
+  registerMemory(program);
 
   await program.parseAsync(process.argv);
 }

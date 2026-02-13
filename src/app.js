@@ -1,11 +1,20 @@
 const express = require("express");
 const { loadConfig } = require("./configStore");
 const { renderOnboardPage, handleOnboardPost } = require("./onboard");
-const { handleMessage } = require("./agentRouter");
+const { handleEvent } = require("./agentRouter");
+const { normalizeEvent } = require("./gateway");
 const { startWhatsApp } = require("./whatsapp");
 const { getGmailAuthUrl, handleGmailOAuthCallback } = require("./gmail");
 const { listLeads, getLeadById, listMessages } = require("./leadStore");
 const { renderDashboard, renderLeadDetail } = require("./dashboard");
+const { startScheduler } = require("./scheduler");
+const { runWorkflow } = require("./workflowEngine");
+const {
+  listWorkflowRuns,
+  getWorkflowRun,
+  listWorkflowSteps
+} = require("./workflowStore");
+const { listMemory, getMemory } = require("./memoryStore");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -54,14 +63,12 @@ app.get("/gmail/oauth2callback", async (req, res) => {
 app.post("/chat", async (req, res) => {
   const config = loadConfig();
   const payload = req.body || {};
-  const result = await handleMessage(
-    {
-      source: payload.source || "web",
-      content: payload.content || "",
-      context: payload.context || {}
-    },
-    config
-  );
+  const event = normalizeEvent({
+    source: payload.source || "web",
+    content: payload.content || "",
+    context: payload.context || {}
+  });
+  const result = await handleEvent(event, config);
   res.json(result);
 });
 
@@ -97,28 +104,96 @@ app.get("/api/leads/:id/messages", async (req, res) => {
   res.json(messages);
 });
 
+app.get("/api/market", (req, res) => {
+  const config = loadConfig();
+  res.json(config.market || {});
+});
+
+app.get("/api/memory", async (req, res) => {
+  const scope = req.query.scope;
+  if (!scope) {
+    return res.status(400).json({ error: "Missing scope" });
+  }
+  if (req.query.key) {
+    const entry = await getMemory(scope, String(req.query.key));
+    if (!entry) {
+      return res.status(404).json({ error: "Memory not found" });
+    }
+    return res.json(entry);
+  }
+  const limit = Number(req.query.limit) || 20;
+  const entries = await listMemory(scope, limit);
+  return res.json(entries);
+});
+
+app.get("/api/workflows", async (req, res) => {
+  const runs = await listWorkflowRuns(50);
+  res.json(runs);
+});
+
+app.get("/api/workflows/:id", async (req, res) => {
+  const run = await getWorkflowRun(Number(req.params.id));
+  if (!run) {
+    return res.status(404).json({ error: "Workflow not found" });
+  }
+  const steps = await listWorkflowSteps(run.id);
+  res.json({ run, steps });
+});
+
+app.post("/api/workflows/run", async (req, res) => {
+  const config = loadConfig();
+  const body = req.body || {};
+  if (!body.name) {
+    return res.status(400).json({ error: "Missing workflow name" });
+  }
+  try {
+    const result = await runWorkflow(body.name, body.input || {}, config, {
+      source: "api",
+      leadId: body.input && body.input.leadId
+    });
+    res.json({ status: "ok", result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/leads/:id/followup", async (req, res) => {
+  const config = loadConfig();
+  const leadId = Number(req.params.id);
+  try {
+    const result = await runWorkflow(
+      "lead_followup",
+      { leadId },
+      config,
+      { source: "api", leadId }
+    );
+    res.json({ status: "ok", result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const config = loadConfig();
 const port = process.env.PORT || config.app.port || 3000;
 
 app.listen(port, () => {
   console.log(`PropAI-Claw listening on http://localhost:${port}`);
   console.log("Run `npm run onboard` for terminal setup.");
+  startScheduler(config);
 });
 
 if (config.whatsapp && config.whatsapp.enabled) {
   startWhatsApp({
     onMessage: async (message) => {
       const latestConfig = loadConfig();
-      const result = await handleMessage(
-        {
-          source: "whatsapp",
-          content: message.body,
-          context: {
-            whatsapp: { from: message.from }
-          }
-        },
-        latestConfig
-      );
+      const event = normalizeEvent({
+        source: "whatsapp",
+        content: message.body,
+        context: {
+          whatsapp: { from: message.from }
+        }
+      });
+      const result = await handleEvent(event, latestConfig);
       await message.reply(result.reply);
     }
   });

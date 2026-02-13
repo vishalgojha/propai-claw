@@ -36,6 +36,8 @@ Commands include:
 - Search: `propai search "Andheri circle rate"`
 - Config: `propai config show`, `propai config set openai_key=xxxx`
 - Shell: `propai shell`
+- Workflows: `propai workflow list`, `propai workflow run lead_followup --lead 3`, `propai workflow show 12`
+- Memory: `propai memory list lead`, `propai memory get lead 3`, `propai memory set market Mumbai "Circle rate notes"`
 
 To install the CLI globally:
 
@@ -105,6 +107,57 @@ Uses SQLite at `data/propai.db` by default. Change via `storage.dbPath` in `conf
 ## Dashboard
 
 Open `http://localhost:3000/dashboard` for a simple lead list and conversation history.
+
+## Scheduler & Workflows
+
+The scheduler can run workflows on a cron schedule. Configure in `config.local.json`:
+
+```
+{
+  "scheduler": {
+    "enabled": true,
+    "timezone": "Asia/Kolkata",
+    "jobs": [
+      {
+        "name": "lead_followup_scan",
+        "cron": "0 */6 * * *",
+        "workflow": "lead_followup_scan",
+        "enabled": true
+      }
+    ]
+  }
+}
+```
+
+Workflows live in `src/workflows.js` and are executed with audit logs in SQLite.
+
+Retry policy per step:
+
+```
+{
+  "name": "compose_followup",
+  "tool": "ai_generate",
+  "retry": { "retries": 2, "delayMs": 800, "backoffFactor": 2 }
+}
+```
+
+## Memory API
+
+```
+GET /api/memory?scope=lead&key=3
+GET /api/memory?scope=market&key=Mumbai
+GET /api/memory?scope=global&limit=5
+```
+
+## Tool Registry
+
+Tools are declared in `src/toolRegistry.js` with metadata and can be disabled via:
+
+```
+{
+  "tools": { "disabled": ["gmail_send"] }
+}
+```
 
 ## Notes
 

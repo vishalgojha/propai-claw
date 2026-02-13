@@ -37,6 +37,56 @@ async function initDb(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_messages_lead_id ON messages(lead_id);
+
+    CREATE TABLE IF NOT EXISTS tool_calls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tool_name TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      status TEXT,
+      error TEXT,
+      lead_id INTEGER,
+      workflow_run_id INTEGER,
+      source TEXT,
+      started_at TEXT,
+      finished_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT,
+      status TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error TEXT,
+      started_at TEXT,
+      finished_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS workflow_steps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workflow_run_id INTEGER,
+      step_name TEXT,
+      tool_name TEXT,
+      status TEXT,
+      input_json TEXT,
+      output_json TEXT,
+      error TEXT,
+      started_at TEXT,
+      finished_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT,
+      key TEXT,
+      content TEXT,
+      tags TEXT,
+      updated_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
+    CREATE INDEX IF NOT EXISTS idx_tool_calls_workflow ON tool_calls(workflow_run_id);
   `);
 }
 

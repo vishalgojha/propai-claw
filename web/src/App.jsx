@@ -189,10 +189,132 @@ function useMarketSearch() {
   };
 }
 
+function useWorkflowRuns() {
+  const [runs, setRuns] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadRuns() {
+      try {
+        const response = await fetch("/api/workflows");
+        if (!response.ok) throw new Error("Failed to load workflows");
+        const data = await response.json();
+        if (active) setRuns(data);
+      } catch (_) {
+        setRuns([]);
+      }
+    }
+    loadRuns();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return runs;
+}
+
+function useMarketInfo() {
+  const [market, setMarket] = useState({ city: "Mumbai", notes: "" });
+
+  useEffect(() => {
+    let active = true;
+    async function loadMarket() {
+      try {
+        const response = await fetch("/api/market");
+        if (!response.ok) throw new Error("Failed to load market");
+        const data = await response.json();
+        if (active) setMarket(data || {});
+      } catch (_) {
+        setMarket({ city: "Mumbai", notes: "" });
+      }
+    }
+    loadMarket();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return market;
+}
+
+function useMemory(activeLead, market) {
+  const [leadMemory, setLeadMemory] = useState("");
+  const [marketMemory, setMarketMemory] = useState("");
+  const [globalMemory, setGlobalMemory] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadLeadMemory() {
+      if (!activeLead) return;
+      try {
+        const response = await fetch(
+          `/api/memory?scope=lead&key=${activeLead.id}`
+        );
+        if (!response.ok) throw new Error("Missing lead memory");
+        const data = await response.json();
+        if (active) setLeadMemory(data.content || "");
+      } catch (_) {
+        if (active) setLeadMemory("");
+      }
+    }
+    loadLeadMemory();
+    return () => {
+      active = false;
+    };
+  }, [activeLead]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMarketMemory() {
+      if (!market || !market.city) return;
+      try {
+        const response = await fetch(
+          `/api/memory?scope=market&key=${encodeURIComponent(market.city)}`
+        );
+        if (!response.ok) throw new Error("Missing market memory");
+        const data = await response.json();
+        if (active) setMarketMemory(data.content || "");
+      } catch (_) {
+        if (active) setMarketMemory("");
+      }
+    }
+    loadMarketMemory();
+    return () => {
+      active = false;
+    };
+  }, [market]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadGlobalMemory() {
+      try {
+        const response = await fetch("/api/memory?scope=global&limit=5");
+        if (!response.ok) throw new Error("Missing global memory");
+        const data = await response.json();
+        if (active) setGlobalMemory(data);
+      } catch (_) {
+        if (active) setGlobalMemory([]);
+      }
+    }
+    loadGlobalMemory();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { leadMemory, marketMemory, globalMemory };
+}
+
 function statusTag(status) {
   if (status === "hot") return "tag tag-hot";
   if (status === "warm") return "tag tag-warm";
   return "tag tag-cold";
+}
+
+function workflowTag(status) {
+  if (status === "success") return "tag tag-ok";
+  if (status === "running") return "tag tag-run";
+  return "tag tag-fail";
 }
 
 function computeRiskFlags(lead) {
@@ -218,6 +340,9 @@ export default function App() {
     useBackendData();
   const analyzer = useAnalyzer();
   const market = useMarketSearch();
+  const workflowRuns = useWorkflowRuns();
+  const marketInfo = useMarketInfo();
+  const memory = useMemory(activeLead, marketInfo);
 
   const stats = useMemo(() => {
     const hot = leads.filter((lead) => lead.status === "hot").length;
@@ -236,7 +361,9 @@ export default function App() {
             <p className="text-xs uppercase tracking-[0.4em] text-textMuted">
               PropAI Command Center
             </p>
-            <h1 className="text-3xl font-semibold">Mumbai Deal Operations</h1>
+            <h1 className="text-3xl font-semibold">
+              {(marketInfo && marketInfo.city) || "Market"} Deal Operations
+            </h1>
             <p className="mt-2 text-sm text-textMuted">
               Live lead intelligence, conversation flow, and market responses.
             </p>
@@ -426,6 +553,39 @@ export default function App() {
                   </p>
                 </div>
                 <div>
+                  <p className="text-xs uppercase text-textMuted">Workflows</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={async () => {
+                        await fetch("/api/leads/" + activeLead.id + "/followup", {
+                          method: "POST"
+                        });
+                      }}
+                      className="rounded-full border border-border bg-panel px-3 py-2 text-xs text-text transition hover:border-accent"
+                    >
+                      Draft follow-up
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await fetch("/api/workflows/run", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            name: "lead_followup_scan",
+                            input: { followupHours: 48 }
+                          })
+                        });
+                      }}
+                      className="rounded-full border border-border bg-panel px-3 py-2 text-xs text-text transition hover:border-accent"
+                    >
+                      Follow-up scan
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-textMuted">
+                    Follow-up drafts are stored in lead notes.
+                  </p>
+                </div>
+                <div>
                   <p className="text-xs uppercase text-textMuted">
                     Follow-up timer
                   </p>
@@ -494,6 +654,86 @@ export default function App() {
             </div>
             <div className="mt-4 whitespace-pre-wrap text-sm text-textMuted">
               {market.result || "Search results and summary will appear here."}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-10 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-[0.3em] text-textMuted">
+                Workflow Runs
+              </h2>
+              <span className="text-xs text-textMuted">
+                Recent automation logs
+              </span>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              {workflowRuns.length ? (
+                workflowRuns.slice(0, 6).map((run) => (
+                  <div
+                    key={run.id}
+                    className="rounded-xl border border-border bg-panelStrong px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">{run.name}</p>
+                        <p className="text-xs text-textMuted">
+                          {formatTime(run.started_at)}
+                        </p>
+                      </div>
+                      <span className={workflowTag(run.status)}>
+                        {run.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-textMuted">
+                  No workflow runs yet. Trigger a follow-up scan to populate.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-[0.3em] text-textMuted">
+                Memory Vault
+              </h2>
+              <span className="text-xs text-textMuted">
+                Lead + market context
+              </span>
+            </div>
+            <div className="mt-4 space-y-4 text-sm text-textMuted">
+              <div>
+                <p className="text-xs uppercase text-textMuted">Lead memory</p>
+                <p className="mt-2 whitespace-pre-wrap">
+                  {memory.leadMemory || "No lead memory yet."}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-textMuted">Market memory</p>
+                <p className="mt-2 whitespace-pre-wrap">
+                  {memory.marketMemory || "No market memory yet."}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-textMuted">Global memory</p>
+                {memory.globalMemory.length ? (
+                  <ul className="mt-2 space-y-2 text-xs text-textMuted">
+                    {memory.globalMemory.map((entry) => (
+                      <li key={`${entry.scope}-${entry.key}`}>
+                        • {entry.content}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-textMuted">
+                    No global memory yet.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </section>

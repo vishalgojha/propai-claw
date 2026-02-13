@@ -189,12 +189,12 @@ async function callCohere({ baseUrl, apiKey, model, prompt, temperature }) {
   return (data.text || "").trim();
 }
 
-async function generateResponse(prompt, config) {
+async function generateResponse(prompt, config, options = {}) {
   const provider = (config.ai.provider || "openai").toLowerCase();
   const providerConfig = resolveProviderConfig(config, provider);
   const model = config.ai.model || providerConfig.model;
   const temperature = config.ai.temperature;
-  const systemPrompt = config.ai.systemPrompt;
+  const systemPrompt = options.systemPrompt || config.ai.systemPrompt;
 
   switch (provider) {
     case "openai":
