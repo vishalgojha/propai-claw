@@ -5,17 +5,16 @@ Local real estate AI assistant with WhatsApp, Gmail, web search, and multi-provi
 ## Quickstart
 
 1. npm install
-2. npm run onboard
-3. npm start
-4. Open http://localhost:3000/onboard if you want the web UI
-5. Open http://localhost:3000/dashboard for leads
+2. propai onboard
+3. propai start --port 1310
+4. Open http://localhost:1310/dashboard for leads
 
 ## Terminal Onboarding
 
 Run:
 
 ```
-npm run onboard
+propai onboard
 ```
 
 This walks you through provider, search, Gmail, and WhatsApp configuration from the terminal.
@@ -38,6 +37,7 @@ Commands include:
 - Shell: `propai shell`
 - Workflows: `propai workflow list`, `propai workflow run lead_followup --lead 3`, `propai workflow show 12`
 - Memory: `propai memory list lead`, `propai memory get lead 3`, `propai memory set market Mumbai "Circle rate notes"`
+- Onboarding: `propai onboard`
 
 To install the CLI globally:
 

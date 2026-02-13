@@ -90,6 +90,9 @@ const DEFAULT_CONFIG = {
   whatsapp: {
     enabled: false
   },
+  onboarding: {
+    webEnabled: false
+  },
   tools: {
     disabled: [],
     permissions: {}

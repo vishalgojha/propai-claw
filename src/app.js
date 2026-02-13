@@ -26,21 +26,34 @@ app.get("/health", (req, res) => {
 
 app.get("/", (req, res) => {
   const config = loadConfig();
-  if (!config.ai || !config.ai.provider) {
-    return res.redirect("/onboard");
-  }
   const host = req.headers.host || "localhost";
+  if (!config.ai || !config.ai.provider) {
+    return res.send(
+      `PropAI-Claw is running at http://${host}. Run "propai onboard" to configure.`
+    );
+  }
   res.send(
-    `PropAI-Claw is running at http://${host}. Visit /onboard to update settings.`
+    `PropAI-Claw is running at http://${host}. Run "propai onboard" to update settings.`
   );
 });
 
 app.get("/onboard", (req, res) => {
   const config = loadConfig();
+  if (!config.onboarding || !config.onboarding.webEnabled) {
+    return res
+      .status(404)
+      .send("Web onboarding disabled. Use `propai onboard`.");
+  }
   res.send(renderOnboardPage(config));
 });
 
 app.post("/onboard", (req, res) => {
+  const config = loadConfig();
+  if (!config.onboarding || !config.onboarding.webEnabled) {
+    return res
+      .status(404)
+      .send("Web onboarding disabled. Use `propai onboard`.");
+  }
   handleOnboardPost(req.body || {});
   res.redirect("/");
 });

@@ -10,6 +10,7 @@ const { registerConfig } = require("./commands/config");
 const { registerShell } = require("./commands/shell");
 const { registerWorkflow } = require("./commands/workflow");
 const { registerMemory } = require("./commands/memory");
+const { registerOnboard } = require("./commands/onboard");
 
 async function run() {
   const program = new Command();
@@ -27,6 +28,7 @@ async function run() {
   registerShell(program);
   registerWorkflow(program);
   registerMemory(program);
+  registerOnboard(program);
 
   await program.parseAsync(process.argv);
 }
