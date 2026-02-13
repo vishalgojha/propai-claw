@@ -352,6 +352,13 @@ export default function App() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(null);
   const [workflowDetail, setWorkflowDetail] = useState(null);
   const [workflowDetailLoading, setWorkflowDetailLoading] = useState(false);
+  const [consoleToken, setConsoleToken] = useState(
+    () => localStorage.getItem("propai_token") || ""
+  );
+  const [consoleInput, setConsoleInput] = useState("");
+  const [consoleMessages, setConsoleMessages] = useState([]);
+  const [consoleStatus, setConsoleStatus] = useState("");
+  const [consoleRole, setConsoleRole] = useState("");
 
   const stats = useMemo(() => {
     const hot = leads.filter((lead) => lead.status === "hot").length;
@@ -414,6 +421,10 @@ export default function App() {
     };
   }, [selectedWorkflowId]);
 
+  useEffect(() => {
+    localStorage.setItem("propai_token", consoleToken);
+  }, [consoleToken]);
+
   async function saveMemoryEntry() {
     if (!memoryScope || !memoryKey || !memoryContent.trim()) {
       setMemoryStatus("Scope, key, and content are required.");
@@ -438,6 +449,39 @@ export default function App() {
       setMemoryStatus("Failed to save memory.");
     } finally {
       setMemorySaving(false);
+    }
+  }
+
+  async function sendConsoleCommand() {
+    if (!consoleInput.trim()) return;
+    const userMessage = consoleInput.trim();
+    setConsoleMessages((messages) => [
+      ...messages,
+      { role: "user", content: userMessage }
+    ]);
+    setConsoleInput("");
+    setConsoleStatus("");
+    try {
+      const response = await fetch("/api/agent/command", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-propai-token": consoleToken
+        },
+        body: JSON.stringify({ message: userMessage })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setConsoleStatus(data.error || "Command failed.");
+        return;
+      }
+      setConsoleRole(data.role || "");
+      setConsoleMessages((messages) => [
+        ...messages,
+        { role: "system", content: data.message || "Command executed." }
+      ]);
+    } catch (_) {
+      setConsoleStatus("Unable to reach control API.");
     }
   }
 
@@ -906,6 +950,79 @@ export default function App() {
               {memoryStatus && (
                 <p className="mt-2 text-xs text-textMuted">{memoryStatus}</p>
               )}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-10">
+          <div className="card p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-[0.3em] text-textMuted">
+                Agent Console
+              </h2>
+              <span className="text-xs text-textMuted">
+                Role: {consoleRole || "unknown"}
+              </span>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+              <div className="rounded-xl border border-border bg-panelStrong p-4 text-xs text-textMuted">
+                <p className="text-xs uppercase text-textMuted">Access token</p>
+                <input
+                  value={consoleToken}
+                  onChange={(event) => setConsoleToken(event.target.value)}
+                  placeholder="Paste broker token"
+                  className="mt-3 w-full rounded-lg border border-border bg-panel p-2 text-xs text-text"
+                />
+                <p className="mt-3 text-[11px] text-textMuted">
+                  Tokens are set in config.local.json under auth.tokens.
+                </p>
+              </div>
+              <div className="flex flex-col rounded-xl border border-border bg-panelStrong p-4">
+                <div className="flex-1 space-y-3 overflow-y-auto text-sm">
+                  {consoleMessages.length ? (
+                    consoleMessages.map((message, index) => (
+                      <div
+                        key={`${message.role}-${index}`}
+                        className={`console-bubble ${
+                          message.role === "user"
+                            ? "console-user"
+                            : "console-system"
+                        }`}
+                      >
+                        {message.content}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-textMuted">
+                      Try: “Switch model to gpt-4o”, “Mark lead 3 as hot”, “Enable
+                      scheduler”.
+                    </p>
+                  )}
+                </div>
+                {consoleStatus && (
+                  <p className="mt-3 text-xs text-bad">{consoleStatus}</p>
+                )}
+                <div className="mt-4 flex gap-2">
+                  <input
+                    value={consoleInput}
+                    onChange={(event) => setConsoleInput(event.target.value)}
+                    placeholder="Type a command..."
+                    className="flex-1 rounded-xl border border-border bg-panel p-3 text-sm text-text outline-none focus:border-accent"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        sendConsoleCommand();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={sendConsoleCommand}
+                    className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-base"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>

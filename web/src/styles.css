@@ -91,6 +91,25 @@ body {
   color: rgb(var(--bad));
 }
 
+.console-bubble {
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.console-user {
+  align-self: flex-end;
+  background: rgba(76, 201, 201, 0.2);
+  color: rgb(var(--accent-strong));
+}
+
+.console-system {
+  align-self: flex-start;
+  background: rgba(24, 30, 38, 0.7);
+  color: rgb(var(--text));
+}
+
 .fade-in {
   opacity: 0;
   animation: rise 0.6s ease forwards;

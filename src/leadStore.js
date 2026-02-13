@@ -97,6 +97,18 @@ async function listLeads(limit = 200) {
   );
 }
 
+async function findLeadsByName(name, limit = 5) {
+  const db = await getDb();
+  return db.all(
+    `SELECT * FROM leads
+     WHERE LOWER(lead_name) LIKE ?
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+    `%${name.toLowerCase()}%`,
+    limit
+  );
+}
+
 async function listMessages(leadId, limit = 20) {
   const db = await getDb();
   return db.all(
@@ -143,6 +155,7 @@ module.exports = {
   listLeads,
   listMessages,
   listLeadsNeedingFollowup,
+  findLeadsByName,
   deleteMessagesForLead,
   deleteAllMessages
 };

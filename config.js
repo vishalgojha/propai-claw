@@ -93,6 +93,16 @@ const DEFAULT_CONFIG = {
   onboarding: {
     webEnabled: false
   },
+  auth: {
+    tokens: {
+      admin: [],
+      operator: [],
+      viewer: []
+    }
+  },
+  automations: {
+    autoDraft: true
+  },
   tools: {
     disabled: [],
     permissions: {}

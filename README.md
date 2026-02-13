@@ -72,6 +72,29 @@ npm run dev
 http://localhost:3001
 ```
 
+## Agent Console (RBAC)
+
+The Agent Console lets brokers issue safe control commands. Configure tokens in `config.local.json`:
+
+```
+{
+  "auth": {
+    "tokens": {
+      "admin": ["ADMIN_TOKEN"],
+      "operator": ["OPERATOR_TOKEN_1", "OPERATOR_TOKEN_2"],
+      "viewer": ["VIEWER_TOKEN"]
+    }
+  }
+}
+```
+
+Example commands:
+- "Switch to OpenRouter"
+- "Set model to gpt-4o-mini"
+- "Mark lead 12 as hot"
+- "Enable scheduler"
+- "Follow-up default to 2 days"
+
 ## Providers
 
 Supported providers:

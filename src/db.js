@@ -87,6 +87,16 @@ async function initDb(db) {
 
     CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
     CREATE INDEX IF NOT EXISTS idx_tool_calls_workflow ON tool_calls(workflow_run_id);
+
+    CREATE TABLE IF NOT EXISTS control_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      command TEXT,
+      action TEXT,
+      status TEXT,
+      result_json TEXT,
+      role TEXT,
+      created_at TEXT
+    );
   `);
 }
 

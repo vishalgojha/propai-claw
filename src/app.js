@@ -15,6 +15,9 @@ const {
   listWorkflowSteps
 } = require("./workflowStore");
 const { listMemory, getMemory, upsertMemory } = require("./memoryStore");
+const { executeAction, parseCommand, ACTIONS } = require("./agentControl");
+const { addControlLog, listControlLogs } = require("./controlLogStore");
+const { resolveRole, canExecute } = require("./auth");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -153,6 +156,72 @@ app.post("/api/memory", async (req, res) => {
     tags: body.tags || null
   });
   res.json({ status: "ok" });
+});
+
+app.post("/api/agent/command", async (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const message = (req.body && req.body.message) || "";
+  if (!message.trim()) {
+    return res.status(400).json({ error: "Missing message" });
+  }
+
+  const parsed = parseCommand(message);
+  const actionSpec = ACTIONS[parsed.action];
+  const requiredRole =
+    parsed.action === "unknown" ? "viewer" : actionSpec ? actionSpec.role : "admin";
+  if (!canExecute(role, requiredRole)) {
+    await addControlLog({
+      command: message,
+      action: parsed.action,
+      status: "forbidden",
+      result: { error: "Insufficient role" },
+      role
+    });
+    return res.status(403).json({ error: "Forbidden" });
+  }
+
+  try {
+    const result = await executeAction(message, role);
+    await addControlLog({
+      command: message,
+      action: parsed.action,
+      status: result.status || "success",
+      result,
+      role
+    });
+    res.json({
+      status: result.status,
+      message: result.message,
+      result: result.result || null,
+      role
+    });
+  } catch (error) {
+    await addControlLog({
+      command: message,
+      action: parsed.action,
+      status: "error",
+      result: { error: error.message },
+      role
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/control/logs", async (req, res) => {
+  const config = loadConfig();
+  const token = req.headers["x-propai-token"];
+  const role = resolveRole(token, config);
+  if (!role || !canExecute(role, "admin")) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const logs = await listControlLogs(50);
+  res.json(logs);
 });
 
 app.get("/api/workflows", async (req, res) => {
