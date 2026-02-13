@@ -83,7 +83,7 @@ async function sendEmail({ to, subject, body }, config) {
   });
 }
 
-async function readEmails(filter, config) {
+async function readEmails(filter, config, limit = 5) {
   const gmail = getGmailClient(config);
   const list = await gmail.users.messages.list({
     userId: "me",
@@ -92,7 +92,7 @@ async function readEmails(filter, config) {
   const messages = list.data.messages || [];
   const results = [];
 
-  for (const message of messages.slice(0, 5)) {
+  for (const message of messages.slice(0, limit)) {
     const detail = await gmail.users.messages.get({
       userId: "me",
       id: message.id,

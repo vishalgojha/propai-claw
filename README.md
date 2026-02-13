@@ -5,8 +5,68 @@ Local real estate AI assistant with WhatsApp, Gmail, web search, and multi-provi
 ## Quickstart
 
 1. npm install
-2. node src/app.js
-3. Open http://localhost:3000/onboard and choose your AI provider
+2. npm run onboard
+3. npm start
+4. Open http://localhost:3000/onboard if you want the web UI
+5. Open http://localhost:3000/dashboard for leads
+
+## Terminal Onboarding
+
+Run:
+
+```
+npm run onboard
+```
+
+This walks you through provider, search, Gmail, and WhatsApp configuration from the terminal.
+
+## CLI Commands
+
+Run:
+
+```
+npm run propai
+```
+
+Commands include:
+- System: `propai start`, `propai stop`, `propai restart`, `propai status`, `propai logs`, `propai health`
+- Agent: `propai agent list`, `propai agent config`, `propai agent test "<text>"`, `propai agent reset --lead <id>|--all`
+- Leads: `propai lead list`, `propai lead show <id>`, `propai lead update <id> --intent buy`, `propai lead score <id>`
+- Gmail: `propai gmail test`, `propai gmail read`, `propai gmail send --to x --subject y --body z`
+- Search: `propai search "Andheri circle rate"`
+- Config: `propai config show`, `propai config set openai_key=xxxx`
+- Shell: `propai shell`
+
+To install the CLI globally:
+
+```
+npm link
+propai --help
+```
+
+## Command Center UI (React)
+
+The UI runs separately from the backend.
+
+1. Start backend on port 1310:
+
+```
+propai start --port 1310
+```
+
+2. Start the UI:
+
+```
+cd web
+npm install
+npm run dev
+```
+
+3. Open the UI:
+
+```
+http://localhost:3001
+```
 
 ## Providers
 
@@ -37,6 +97,14 @@ Supported providers:
 ## Web Search
 
 Set `search.provider` and `search.apiKey` in `config.local.json`. Default provider is Serper.
+
+## Storage
+
+Uses SQLite at `data/propai.db` by default. Change via `storage.dbPath` in `config.local.json`.
+
+## Dashboard
+
+Open `http://localhost:3000/dashboard` for a simple lead list and conversation history.
 
 ## Notes
 

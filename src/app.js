@@ -4,6 +4,8 @@ const { renderOnboardPage, handleOnboardPost } = require("./onboard");
 const { handleMessage } = require("./agentRouter");
 const { startWhatsApp } = require("./whatsapp");
 const { getGmailAuthUrl, handleGmailOAuthCallback } = require("./gmail");
+const { listLeads, getLeadById, listMessages } = require("./leadStore");
+const { renderDashboard, renderLeadDetail } = require("./dashboard");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -18,7 +20,10 @@ app.get("/", (req, res) => {
   if (!config.ai || !config.ai.provider) {
     return res.redirect("/onboard");
   }
-  res.send("PropAI-Claw is running. Visit /onboard to update settings.");
+  const host = req.headers.host || "localhost";
+  res.send(
+    `PropAI-Claw is running at http://${host}. Visit /onboard to update settings.`
+  );
 });
 
 app.get("/onboard", (req, res) => {
@@ -60,11 +65,44 @@ app.post("/chat", async (req, res) => {
   res.json(result);
 });
 
+app.get("/dashboard", async (req, res) => {
+  const leads = await listLeads(200);
+  res.send(renderDashboard(leads));
+});
+
+app.get("/dashboard/leads/:id", async (req, res) => {
+  const lead = await getLeadById(Number(req.params.id));
+  if (!lead) {
+    return res.status(404).send("Lead not found.");
+  }
+  const messages = await listMessages(lead.id, 50);
+  res.send(renderLeadDetail(lead, messages));
+});
+
+app.get("/api/leads", async (req, res) => {
+  const leads = await listLeads(200);
+  res.json(leads);
+});
+
+app.get("/api/leads/:id", async (req, res) => {
+  const lead = await getLeadById(Number(req.params.id));
+  if (!lead) {
+    return res.status(404).json({ error: "Lead not found" });
+  }
+  res.json(lead);
+});
+
+app.get("/api/leads/:id/messages", async (req, res) => {
+  const messages = await listMessages(Number(req.params.id), 100);
+  res.json(messages);
+});
+
 const config = loadConfig();
 const port = process.env.PORT || config.app.port || 3000;
 
 app.listen(port, () => {
   console.log(`PropAI-Claw listening on http://localhost:${port}`);
+  console.log("Run `npm run onboard` for terminal setup.");
 });
 
 if (config.whatsapp && config.whatsapp.enabled) {

@@ -3,9 +3,18 @@ const path = require("path");
 const CONFIG_PATH =
   process.env.PROPAI_CONFIG_PATH || path.join(__dirname, "config.local.json");
 
+const { DEFAULT_MODEL_CATALOG } = require("./src/modelCatalog");
+
 const DEFAULT_CONFIG = {
   app: {
     port: 3000
+  },
+  storage: {
+    dbPath: "data/propai.db"
+  },
+  market: {
+    city: "Mumbai",
+    notes: ""
   },
   ai: {
     provider: "openai",
@@ -80,7 +89,8 @@ const DEFAULT_CONFIG = {
   },
   whatsapp: {
     enabled: false
-  }
+  },
+  modelCatalog: DEFAULT_MODEL_CATALOG
 };
 
 module.exports = {

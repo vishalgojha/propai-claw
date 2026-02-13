@@ -32,11 +32,13 @@ function renderOnboardPage(config) {
   const activeProvider = (config.ai && config.ai.provider) || "openai";
   const providerConfig =
     (config.providers && config.providers[activeProvider]) || {};
+  const modelCatalog = config.modelCatalog || {};
   const activeSearchProvider =
     (config.search && config.search.provider) || "serper";
   const searchConfig = config.search || {};
   const gmailConfig = config.gmail || {};
   const whatsappConfig = config.whatsapp || {};
+  const marketConfig = config.market || {};
 
   const providerOptions = PROVIDERS.map((provider) => {
     const selected = provider.id === activeProvider ? "selected" : "";
@@ -67,6 +69,10 @@ function renderOnboardPage(config) {
     : "";
   const gmailRedirectValue = gmailConfig.redirectUri
     ? escapeHtml(gmailConfig.redirectUri)
+    : "";
+  const marketCityValue = marketConfig.city ? escapeHtml(marketConfig.city) : "";
+  const marketNotesValue = marketConfig.notes
+    ? escapeHtml(marketConfig.notes)
     : "";
 
   const providerHasKey = Boolean(providerConfig.apiKey);
@@ -103,7 +109,8 @@ function renderOnboardPage(config) {
       </select>
 
       <label for="model">Model</label>
-      <input id="model" name="model" value="${modelValue}" placeholder="gpt-4o-mini, claude-sonnet, llama3.1, etc" />
+      <input id="model" name="model" list="modelList" value="${modelValue}" placeholder="Choose or type a model" />
+      <datalist id="modelList"></datalist>
 
       <div class="section">
         <div class="row">
@@ -168,12 +175,21 @@ function renderOnboardPage(config) {
         <div class="hint">If enabled, start the server and scan the QR code in the terminal.</div>
       </div>
 
+      <div class="section">
+        <h3>Market Memory</h3>
+        <label for="marketCity">Market City</label>
+        <input id="marketCity" name="marketCity" value="${marketCityValue}" placeholder="Mumbai" />
+        <label for="marketNotes">Market Notes</label>
+        <input id="marketNotes" name="marketNotes" value="${marketNotesValue}" placeholder="Circle rates, micro-market notes" />
+      </div>
+
       <button type="submit">Save Configuration</button>
     </form>
   </div>
 
   <script>
     const providerDefaults = ${JSON.stringify(DEFAULT_CONFIG.providers)};
+    const modelCatalog = ${JSON.stringify(modelCatalog)};
 
     function onProviderChange() {
       const provider = document.getElementById("provider").value;
@@ -181,6 +197,7 @@ function renderOnboardPage(config) {
       const baseUrl = document.getElementById("baseUrl");
       const model = document.getElementById("model");
       const azureFields = document.getElementById("azureFields");
+      const modelList = document.getElementById("modelList");
 
       const defaults = providerDefaults[provider] || {};
       if (defaults.baseUrl) baseUrl.placeholder = defaults.baseUrl;
@@ -197,6 +214,14 @@ function renderOnboardPage(config) {
       }
 
       azureFields.style.display = provider === "azure_openai" ? "block" : "none";
+
+      modelList.innerHTML = "";
+      const models = modelCatalog[provider] || [];
+      models.forEach((modelName) => {
+        const option = document.createElement("option");
+        option.value = modelName;
+        modelList.appendChild(option);
+      });
     }
 
     function onSearchProviderChange() {
@@ -242,6 +267,8 @@ function handleOnboardPost(formData) {
   const gmailTokenPath = normalizeValue(formData.gmailTokenPath);
   const gmailRedirectUri = normalizeValue(formData.gmailRedirectUri);
   const whatsappEnabled = normalizeBoolean(formData.whatsappEnabled);
+  const marketCity = normalizeValue(formData.marketCity);
+  const marketNotes = normalizeValue(formData.marketNotes);
 
   const patch = {
     ai: {
@@ -276,6 +303,12 @@ function handleOnboardPost(formData) {
 
   if (whatsappEnabled !== undefined) {
     patch.whatsapp = { enabled: whatsappEnabled };
+  }
+
+  if (marketCity || marketNotes) {
+    patch.market = {};
+    if (marketCity) patch.market.city = marketCity;
+    if (marketNotes) patch.market.notes = marketNotes;
   }
 
   return saveConfig(patch);
