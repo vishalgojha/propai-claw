@@ -5,9 +5,10 @@ Local real estate AI assistant with WhatsApp, Gmail, web search, and multi-provi
 ## Quickstart
 
 1. npm install
-2. propai onboard
-3. propai start --port 1310
-4. Open http://localhost:1310/dashboard for leads
+2. npm run migrate
+3. propai onboard
+4. propai start --port 1310
+5. Open http://localhost:1310/dashboard for leads
 
 ## Desktop App (Electron)
 
@@ -232,6 +233,83 @@ Retry policy per step:
 GET /api/memory?scope=lead&key=3
 GET /api/memory?scope=market&key=Mumbai
 GET /api/memory?scope=global&limit=5
+```
+
+## Webhooks
+
+PropAI supports outgoing webhooks so external systems can subscribe to key events.
+
+### Supported events
+
+- `lead.created`
+- `lead.updated`
+- `lead.hot`
+- `workflow.completed`
+
+### Webhook management API
+
+```
+GET /api/webhooks
+POST /api/webhooks
+GET /api/webhooks/:id
+PUT /api/webhooks/:id
+DELETE /api/webhooks/:id
+```
+
+Create payload example:
+
+```json
+{
+  "event_type": "lead.created",
+  "url": "https://example.com/webhooks/propai",
+  "secret": "my-shared-secret",
+  "active": true
+}
+```
+
+Validation rules:
+- `event_type` must be one of the supported events.
+- `url` must be a valid `http` or `https` URL.
+- `active` must be boolean.
+
+### Delivery behavior
+
+- Deliveries are persisted in `webhook_deliveries`.
+- Each delivery is attempted up to 3 times.
+- Retry backoff is exponential.
+- JSON payload shape:
+
+```json
+{
+  "event_type": "lead.created",
+  "occurred_at": "2026-02-14T00:00:00.000Z",
+  "data": {}
+}
+```
+
+- If `secret` is set, requests include:
+  - Header: `X-PropAI-Signature`
+  - Algorithm: HMAC-SHA256 over the raw JSON body.
+- Event type header:
+  - `X-PropAI-Event`
+
+### Webhook tables
+
+- `webhooks`:
+  - `id`, `event_type`, `url`, `secret`, `active`, `created_at`, `updated_at`
+- `webhook_deliveries`:
+  - `id`, `webhook_id`, `payload`, `status`, `attempts`, `last_error`, `response_code`, `created_at`, `updated_at`
+
+### Run migrations
+
+```
+npm run migrate
+```
+
+### Run webhook tests
+
+```
+npm test
 ```
 
 ## Tool Registry
