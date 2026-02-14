@@ -200,3 +200,92 @@ body {
   opacity: 0;
   animation: rise 0.6s ease forwards;
 }
+
+.desktop-loading-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.desktop-loading-card {
+  width: min(420px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgb(var(--border));
+  background: rgba(18, 22, 28, 0.92);
+  padding: 28px;
+  text-align: center;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+}
+
+.desktop-loading-card h1 {
+  margin: 12px 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.desktop-loading-card p {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(var(--text-muted));
+}
+
+.desktop-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto;
+  border-radius: 999px;
+  border: 3px solid rgba(76, 201, 201, 0.25);
+  border-top-color: rgba(116, 255, 234, 1);
+  animation: desktop-spin 0.8s linear infinite;
+}
+
+.desktop-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 8, 12, 0.72);
+}
+
+.desktop-modal-card {
+  width: min(520px, 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(235, 95, 95, 0.35);
+  background: rgba(18, 22, 28, 0.96);
+  padding: 18px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.desktop-modal-card h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.desktop-modal-card p {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: rgb(var(--text-muted));
+  line-height: 1.5;
+}
+
+.desktop-modal-card button {
+  margin-top: 14px;
+  border: 1px solid rgb(var(--border));
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: rgb(var(--text));
+  background: rgba(24, 30, 38, 0.92);
+}
+
+@keyframes desktop-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

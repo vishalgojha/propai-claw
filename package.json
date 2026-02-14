@@ -2,12 +2,20 @@
   "name": "propai-claw",
   "version": "0.1.0",
   "description": "PropAI-Claw real estate AI assistant",
-  "main": "src/app.js",
+  "main": "electron/main.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/app.js",
     "onboard": "node src/onboard-cli.js",
-    "propai": "node cli/index.js"
+    "propai": "node cli/index.js",
+    "migrate": "node scripts/run-migrations.js",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build",
+    "electron": "electron .",
+    "electron:dev": "npm run build:web && electron .",
+    "build:electron": "npm run build:web && electron-builder -wml",
+    "build:electron:dir": "npm run build:web && electron-builder -wml --dir",
+    "test": "node tests/webhooks.test.js"
   },
   "bin": {
     "propai": "cli/index.js"
@@ -20,11 +28,67 @@
     "commander": "^12.1.0",
     "express": "^4.19.2",
     "googleapis": "^140.0.0",
+    "http-proxy-middleware": "^3.0.0",
     "inquirer": "^9.2.23",
     "node-cron": "^3.0.3",
     "qrcode-terminal": "^0.12.0",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "whatsapp-web.js": "^1.25.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.propai.dealos",
+    "productName": "PropAI Deal OS",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "cli/**/*",
+      "identity/**/*",
+      "config.js",
+      "package.json",
+      "node_modules/**/*",
+      "web/dist/**/*"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office",
+      "icon": "electron/assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

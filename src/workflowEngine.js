@@ -6,6 +6,7 @@ const {
   createWorkflowStep,
   finishWorkflowStep
 } = require("./workflowStore");
+const { dispatchEvent } = require("./webhookDispatcher");
 
 async function runWorkflow(name, input, config, context = {}) {
   const workflow = WORKFLOWS[name];
@@ -96,6 +97,19 @@ async function runWorkflow(name, input, config, context = {}) {
   if (status === "error") {
     throw new Error(errorMessage);
   }
+
+  await dispatchEvent("workflow.completed", {
+    workflowRunId: runId,
+    workflowName: name,
+    input: input || {},
+    output: results,
+    context: context || {}
+  }).catch((dispatchError) => {
+    console.error(
+      "Webhook dispatch failed for workflow.completed:",
+      dispatchError.message
+    );
+  });
 
   return results;
 }

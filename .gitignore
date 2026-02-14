@@ -4,5 +4,6 @@ auth/
 data/
 web/node_modules
 web/dist
+dist-electron
 web/.env
 .env

@@ -19,8 +19,14 @@ const { listMemory, getMemory, upsertMemory } = require("./memoryStore");
 const { executeAction, parseCommand, ACTIONS } = require("./agentControl");
 const { addControlLog, listControlLogs } = require("./controlLogStore");
 const { resolveRole, canExecute, maskToken } = require("./auth");
+const { getSystemStatus } = require("./systemStatus");
+const { registerWebhookRoutes } = require("./webhookRoutes");
 
 let whatsappClient = null;
+const whatsappRuntime = {
+  connected: false,
+  error: null
+};
 
 function getTokenStore(config) {
   const tokens = (config.auth && config.auth.tokens) || {};
@@ -56,6 +62,25 @@ function ensureWhatsAppClient() {
     return { status: "running" };
   }
   whatsappClient = startWhatsApp({
+    onReady: () => {
+      whatsappRuntime.connected = true;
+      whatsappRuntime.error = null;
+    },
+    onAuthFailure: (message) => {
+      whatsappRuntime.connected = false;
+      whatsappRuntime.error = message || "Authentication failed.";
+    },
+    onDisconnected: (reason) => {
+      whatsappRuntime.connected = false;
+      whatsappRuntime.error = reason || "Client disconnected.";
+      whatsappClient = null;
+    },
+    onError: (error) => {
+      whatsappRuntime.connected = false;
+      whatsappRuntime.error =
+        (error && error.message) || "WhatsApp failed to initialize.";
+      whatsappClient = null;
+    },
     onMessage: async (message) => {
       const chat = await message.getChat();
       const isGroup = chat && chat.isGroup;
@@ -78,12 +103,15 @@ function ensureWhatsAppClient() {
       }
     }
   });
+  whatsappRuntime.connected = false;
+  whatsappRuntime.error = null;
   return { status: "started" };
 }
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+registerWebhookRoutes(app);
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
@@ -185,6 +213,15 @@ app.get("/api/leads/:id/messages", async (req, res) => {
 app.get("/api/market", (req, res) => {
   const config = loadConfig();
   res.json(config.market || {});
+});
+
+app.get("/api/system/status", (req, res) => {
+  const config = loadConfig();
+  const status = getSystemStatus(config, {
+    whatsappConnected: whatsappRuntime.connected,
+    whatsappError: whatsappRuntime.error
+  });
+  res.json(status);
 });
 
 app.get("/api/memory", async (req, res) => {
@@ -368,7 +405,9 @@ app.get("/api/whatsapp/status", (req, res) => {
   }
   res.json({
     enabled: Boolean(config.whatsapp && config.whatsapp.enabled),
-    running: Boolean(whatsappClient)
+    running: Boolean(whatsappClient),
+    connected: whatsappRuntime.connected,
+    error: whatsappRuntime.error
   });
 });
 

@@ -9,6 +9,37 @@ Local real estate AI assistant with WhatsApp, Gmail, web search, and multi-provi
 3. propai start --port 1310
 4. Open http://localhost:1310/dashboard for leads
 
+## Desktop App (Electron)
+
+PropAI-Claw can run as a packaged desktop app (`PropAI Deal OS`) that starts the backend internally and hosts the UI in an Electron window.
+
+### Local desktop run
+
+```
+npm install
+npm run build:web
+npm run electron
+```
+
+### Desktop build artifacts
+
+```
+npm run build:electron
+```
+
+Outputs are generated in `dist-electron/`:
+- Windows installer: `.exe` (NSIS)
+- macOS installer: `.dmg`
+- Linux package: `.AppImage`
+
+### Desktop runtime behavior
+
+- Backend starts automatically as a child process.
+- UI is served at `http://localhost:3001` internally and opened by Electron.
+- Backend data/config/logs live in Electron `userData` (not the repo root).
+- First run opens onboarding automatically using `/api/system/status` + `/onboard`.
+- Menu includes Exit, Reload UI, About, Open Logs, Reset App, and Clear WhatsApp Session.
+
 ## Terminal Onboarding
 
 Run:

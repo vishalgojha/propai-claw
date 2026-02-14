@@ -1,4 +1,5 @@
 const { getDb } = require("./db");
+const { dispatchEvent } = require("./webhookDispatcher");
 
 function nowIso() {
   return new Date().toISOString();
@@ -31,7 +32,13 @@ async function getOrCreateLead({ leadKey, source, phone, email }) {
     timestamp,
     timestamp
   );
-  return db.get("SELECT * FROM leads WHERE id = ?", result.lastID);
+  const createdLead = await db.get("SELECT * FROM leads WHERE id = ?", result.lastID);
+  await dispatchEvent("lead.created", {
+    lead: createdLead
+  }).catch((error) => {
+    console.error("Webhook dispatch failed for lead.created:", error.message);
+  });
+  return createdLead;
 }
 
 async function updateLeadFields(leadId, fields) {
@@ -44,9 +51,10 @@ async function updateLeadFields(leadId, fields) {
   });
 
   const keys = Object.keys(updates);
-  if (!keys.length) return;
+  if (!keys.length) return null;
 
   const db = await getDb();
+  const previousLead = await db.get("SELECT * FROM leads WHERE id = ?", leadId);
   const setClause = keys.map((key) => `${key} = ?`).join(", ");
   const values = keys.map((key) => updates[key]);
   values.push(nowIso());
@@ -56,6 +64,30 @@ async function updateLeadFields(leadId, fields) {
     `UPDATE leads SET ${setClause}, updated_at = ? WHERE id = ?`,
     values
   );
+
+  const updatedLead = await db.get("SELECT * FROM leads WHERE id = ?", leadId);
+  if (!updatedLead) return null;
+
+  await dispatchEvent("lead.updated", {
+    leadId: updatedLead.id,
+    previousStatus: previousLead ? previousLead.status : null,
+    changes: updates,
+    lead: updatedLead
+  }).catch((error) => {
+    console.error("Webhook dispatch failed for lead.updated:", error.message);
+  });
+
+  if (updates.status === "hot" && (!previousLead || previousLead.status !== "hot")) {
+    await dispatchEvent("lead.hot", {
+      leadId: updatedLead.id,
+      previousStatus: previousLead ? previousLead.status : null,
+      lead: updatedLead
+    }).catch((error) => {
+      console.error("Webhook dispatch failed for lead.hot:", error.message);
+    });
+  }
+
+  return updatedLead;
 }
 
 async function addMessage({ leadId, source, direction, content }) {
